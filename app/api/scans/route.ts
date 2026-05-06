@@ -5,6 +5,7 @@ import { store } from '@/lib/store'
 import { prisma } from '@/lib/prisma'
 import { ScanType, ScanDepth } from '@/lib/types'
 
+
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
@@ -50,32 +51,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Domain verification: check that the target domain is verified for this user
-    const targetDomain = extractApexDomain(normalizedUrl)
-    const verified = await prisma.verifiedDomain.findFirst({
-      where: { userId, domain: targetDomain, verified: true },
-    })
-    if (!verified) {
-      // Initiate verification if not already pending
-      let pending = await prisma.verifiedDomain.findFirst({
-        where: { userId, domain: targetDomain },
-      })
-      if (!pending) {
-        pending = await prisma.verifiedDomain.create({
-          data: { userId, domain: targetDomain },
-        })
-      }
-      return NextResponse.json(
-        {
-          error: 'domain_not_verified',
-          domain: targetDomain,
-          domainId: pending.id,
-          token: pending.token,
-        },
-        { status: 403 }
-      )
-    }
-
     const scan = await store.createScan({
       targetUrl: normalizedUrl,
       type: type ?? 'unauthenticated',
@@ -102,15 +77,4 @@ export async function GET(req: NextRequest) {
   const userId = (session.user as any).id as string
   const scans = await store.getScansByUser(userId)
   return NextResponse.json({ scans })
-}
-
-function extractApexDomain(url: string): string {
-  try {
-    const { hostname } = new URL(url)
-    const parts = hostname.split('.')
-    if (parts.length <= 2) return hostname
-    return parts.slice(-2).join('.')
-  } catch {
-    return url
-  }
 }
