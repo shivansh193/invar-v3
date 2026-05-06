@@ -1,13 +1,11 @@
 'use client'
 
-import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { signIn } from 'next-auth/react'
 import { Navbar } from '@/components/layout/navbar'
 
 export default function SignupPage() {
-  const router = useRouter()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
@@ -15,14 +13,13 @@ export default function SignupPage() {
   const [password, setPassword] = useState('')
   const [agreed, setAgreed] = useState(false)
   const [error, setError] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
+  const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!agreed) { setError('You must agree to the Terms of Service'); return }
-    setIsLoading(true)
+    setLoading(true)
     setError('')
-
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
@@ -34,16 +31,12 @@ export default function SignupPage() {
         }),
       })
       const data = await res.json()
-      if (!res.ok) {
-        setError(data.error ?? 'Registration failed')
-        return
-      }
-      // Auto sign-in after registration
+      if (!res.ok) { setError(data.error ?? 'Registration failed'); return }
       await signIn('credentials', { email, password, callbackUrl: '/dashboard' })
     } catch {
       setError('Something went wrong. Please try again.')
     } finally {
-      setIsLoading(false)
+      setLoading(false)
     }
   }
 
@@ -79,28 +72,23 @@ export default function SignupPage() {
                 <input
                   type="checkbox"
                   checked={agreed}
-                  onChange={(e) => setAgreed(e.target.checked)}
+                  onChange={e => setAgreed(e.target.checked)}
                   className="mt-1 w-4 h-4 rounded border-zinc-700 bg-zinc-800 focus:ring-[#00D97E] text-[#00D97E]"
                 />
                 <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest leading-relaxed">
-                  I agree to the{' '}
-                  <Link href="#" className="text-zinc-400 hover:text-[#00D97E]">Terms of Service</Link>{' '}
-                  and{' '}
-                  <Link href="#" className="text-zinc-400 hover:text-[#00D97E]">Privacy Policy</Link>.
+                  I agree to the <Link href="#" className="text-zinc-400 hover:text-[#00D97E]">Terms of Service</Link> and <Link href="#" className="text-zinc-400 hover:text-[#00D97E]">Privacy Policy</Link>.
                 </p>
               </div>
 
-              {error && (
-                <p className="text-red-400 font-mono text-xs uppercase tracking-widest">{error}</p>
-              )}
+              {error && <p className="text-red-400 font-mono text-xs uppercase tracking-widest">{error}</p>}
 
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={loading}
                 style={{ fontFamily: "'Space Grotesk', sans-serif" }}
                 className="w-full bg-[#00D97E] text-white font-bold py-4 uppercase tracking-tighter hover:brightness-110 transition-all text-sm shadow-[0_0_20px_rgba(0,217,126,0.1)] disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {isLoading ? 'Creating Account...' : 'Create Account'}
+                {loading ? 'Creating Account…' : 'Create Account'}
               </button>
             </form>
 
@@ -120,8 +108,7 @@ export default function SignupPage() {
           </div>
 
           <p className="text-center text-xs font-mono text-zinc-600 uppercase tracking-widest">
-            Already have an account?{' '}
-            <Link href="/login" className="text-[#00D97E] hover:underline">Log in</Link>
+            Already have an account? <Link href="/login" className="text-[#00D97E] hover:underline">Log in</Link>
           </p>
         </div>
       </main>
@@ -142,19 +129,7 @@ function SocialButton({ icon, label, onClick }: { icon: string; label: string; o
   )
 }
 
-function AuthInput({
-  label,
-  type = 'text',
-  placeholder,
-  value,
-  onChange,
-}: {
-  label: string
-  type?: string
-  placeholder: string
-  value: string
-  onChange: (v: string) => void
-}) {
+function AuthInput({ label, type = 'text', placeholder, value, onChange }: { label: string; type?: string; placeholder: string; value: string; onChange: (v: string) => void }) {
   return (
     <div className="space-y-2">
       <label className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest block">{label}</label>
@@ -162,7 +137,7 @@ function AuthInput({
         type={type}
         placeholder={placeholder}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={e => onChange(e.target.value)}
         className="w-full bg-[#1f1f25] border border-zinc-700 focus:border-[#00D97E] text-white font-mono px-4 py-3 text-xs outline-none transition-colors rounded-sm"
       />
     </div>

@@ -1,161 +1,107 @@
-import Link from 'next/link'
-import { Navbar } from '@/components/layout/navbar'
+'use client'
 
-const TIERS = [
+import Link from 'next/link'
+import { AppShell } from '@/components/layout/app-shell'
+import { Icons } from '@/components/ui/icons'
+
+const FAQS = [
   {
-    name: 'Community',
-    price: '$0',
-    description: 'For individual developers and open source projects.',
-    features: [
-      'Unauthenticated public scans',
-      'OWASP Top 10 coverage',
-      'Standard email support',
-      '1 scan at a time',
-      '7-day report retention'
-    ],
-    cta: 'Start for Free',
-    href: '/scan/new',
-    popular: false
+    q: 'Will my enterprise prospect actually accept this report?',
+    a: "Yes. Invariant's reports use the same severity model and finding categories that traditional pen test firms use (OWASP, CWE), formatted to be immediately readable by a CISO. We've seen them accepted at customers from $50M to $40B in ARR. If a specific prospect requires a SOC 2 attestation instead, the Scale plan maps every finding to SOC 2 controls.",
   },
   {
-    name: 'Growth',
-    price: '$490',
-    description: 'For growing teams that need deeper security insights.',
-    features: [
-      'Authenticated user flow testing',
-      'Business logic vulnerability detection',
-      'CI/CD pipeline integration',
-      '24/7 Priority engineer support',
-      '3 concurrent scans',
-      'Unlimited report retention'
-    ],
-    cta: 'Try Growth Now',
-    href: '/signup',
-    popular: true
+    q: 'How is this different from a manual pen test?',
+    a: "A traditional pen test is a human security engineer testing your product manually over 4–6 weeks. Invariant is an AI agent that explores your product the same way — testing access controls, business logic, and authentication. The category of finding is the same; the speed and cost are not. For most enterprise deals at the seed-to-Series-B stage, our report is sufficient.",
   },
   {
-    name: 'Scale',
-    price: 'Custom',
-    description: 'For enterprises requiring maximum security assurance.',
-    features: [
-      'Custom vulnerability signatures',
-      'Dedicated security engineer',
-      'On-premise execution option',
-      'SLA-backed response times',
-      'Role-based access control',
-      'Advanced API access'
-    ],
-    cta: 'Contact Sales',
-    href: 'mailto:sales@invariant.io',
-    popular: false
-  }
+    q: 'Do I need a technical person to use this?',
+    a: "No. You paste a URL, hand off a test account, and click run. Every finding in the report is written in plain English with the business risk and the specific fix. If you want to hand the fixes to a developer, the report includes code-level guidance.",
+  },
+  {
+    q: 'What happens to my credentials after the scan?',
+    a: "Test credentials are encrypted at rest, scoped to a single scan, and deleted within 30 days. We strongly recommend creating a dedicated test account rather than using a real one. Full details on our security page.",
+  },
+  {
+    q: 'Can I run this on a staging environment first?',
+    a: "Yes — and we recommend it. Staging is the right place to find findings before they ship. You can add staging and production as separate domains.",
+  },
 ]
 
 export default function PricingPage() {
   return (
-    <div className="bg-[#0A0A0F] min-h-screen text-[#e4e1e9]">
-      <Navbar />
-      
-      <main className="max-w-7xl mx-auto px-8 pt-40 pb-32">
-        <div className="text-center mb-24">
-          <h1
-            style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-            className="text-5xl md:text-6xl font-bold text-white uppercase tracking-tight mb-6"
-          >
-            Transparent Pricing
+    <AppShell>
+      <div style={{ padding: '64px 32px 96px', maxWidth: 1200, margin: '0 auto' }}>
+        <div style={{ textAlign: 'center', maxWidth: 760, margin: '0 auto 64px' }}>
+          <div className="eyebrow" style={{ marginBottom: 22 }}>PRICING</div>
+          <h1 className="display" style={{ fontSize: 'clamp(36px, 4vw, 52px)', letterSpacing: '-0.025em', lineHeight: 1.05, marginBottom: 18 }}>
+            A pen test costs <span style={{ color: 'var(--text-3)', textDecoration: 'line-through' }}>$15,000</span> and takes 6 weeks.
+            <br />This costs <span style={{ color: 'var(--accent)' }}>$199/month</span> and takes hours.
           </h1>
-          <p className="text-zinc-500 text-xl max-w-2xl mx-auto">
-            Choose the plan that fits your application's security requirements. From simple scans to deep autonomous testing.
+          <p className="muted" style={{ fontSize: 17, lineHeight: 1.55 }}>
+            The same category of finding. A report your enterprise prospects will accept. Run it as often as you need.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-          {TIERS.map((tier) => (
-            <div 
-              key={tier.name}
-              className={`p-10 border flex flex-col h-full transition-all duration-300 ${
-                tier.popular 
-                  ? 'border-[#00D97E]/40 bg-[#00D97E]/5 relative scale-105 z-10' 
-                  : 'border-zinc-800 bg-[#0f0f14] hover:border-zinc-700'
-              }`}
-            >
-              {tier.popular && (
-                <div className="absolute top-0 right-0 bg-[#00D97E] text-white text-[10px] font-bold px-10 py-1.5 rotate-45 translate-x-4 translate-y-3 uppercase tracking-[0.2em]">
-                  Most Popular
-                </div>
-              )}
-              
-              <div className="mb-10">
-                <h3 
-                  style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-                  className="text-2xl font-bold text-white uppercase tracking-tight mb-2"
-                >
-                  {tier.name}
-                </h3>
-                <p className="text-zinc-500 text-sm leading-relaxed">{tier.description}</p>
-              </div>
+        <div className="pricing-grid">
+          <div className="tier">
+            <h3>Free</h3>
+            <div className="price">$0<small> / forever</small></div>
+            <div className="for">For founders who want to see what an attacker sees before they log in.</div>
+            <ul>
+              <li><Icons.check /><span>Public-surface scan (no login)</span></li>
+              <li><Icons.check /><span>1 scan per day</span></li>
+              <li><Icons.check /><span>Basic report (not shareable as PDF)</span></li>
+              <li><Icons.check /><span>1 domain</span></li>
+            </ul>
+            <Link href="/scan/new" className="btn btn-ghost">Start free — no credit card</Link>
+          </div>
 
-              <div className="mb-10">
-                <div className="flex items-baseline gap-1">
-                  <span className="text-5xl font-bold text-white">{tier.price}</span>
-                  {tier.price !== 'Custom' && <span className="text-zinc-600 font-mono text-sm uppercase">/mo</span>}
-                </div>
-                {tier.price !== 'Custom' && (
-                  <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest mt-2">Billed monthly</p>
-                )}
-              </div>
+          <div className="tier feat">
+            <h3>Growth</h3>
+            <div className="price">$199<small> / month</small></div>
+            <div className="for">For founders preparing for enterprise deals or compliance.</div>
+            <ul>
+              <li><Icons.check /><span>Full authenticated scan</span></li>
+              <li><Icons.check /><span>Tests access controls, permissions, business logic</span></li>
+              <li><Icons.check /><span>Professional PDF report</span></li>
+              <li><Icons.check /><span>Unlimited scans</span></li>
+              <li><Icons.check /><span>API access for CI/CD integration</span></li>
+              <li><Icons.check /><span>Team access (up to 5 seats)</span></li>
+            </ul>
+            <Link href="/scan/new" className="btn btn-primary">Get the report</Link>
+            <p className="muted mt-16" style={{ fontSize: 12, textAlign: 'center' }}>
+              Cancel anytime. Most teams see ROI on their first deal.
+            </p>
+          </div>
 
-              <ul className="space-y-4 mb-12 flex-grow">
-                {tier.features.map((feature) => (
-                  <li key={feature} className="flex items-start gap-3 text-sm text-zinc-400">
-                    <span className="text-[#00D97E] mt-0.5">✓</span>
-                    <span>{feature}</span>
-                  </li>
-                ))}
-              </ul>
+          <div className="tier">
+            <h3>Scale</h3>
+            <div className="price">$499<small> / month</small></div>
+            <div className="for">For companies with active compliance programs (SOC 2, ISO 27001).</div>
+            <ul>
+              <li><Icons.check /><span>Everything in Growth</span></li>
+              <li><Icons.check /><span>Cloud infrastructure audit (AWS, GCP, Azure)</span></li>
+              <li><Icons.check /><span>SOC 2 control mapping on every finding</span></li>
+              <li><Icons.check /><span>White-labeled reports (your logo)</span></li>
+              <li><Icons.check /><span>Priority support</span></li>
+            </ul>
+            <button className="btn btn-ghost">Talk to us</button>
+          </div>
+        </div>
 
-              <Link
-                href={tier.href}
-                className={`w-full py-4 text-center font-bold uppercase tracking-tighter transition-all ${
-                  tier.popular
-                    ? 'bg-[#00D97E] text-white hover:brightness-110'
-                    : 'border border-zinc-700 text-zinc-300 hover:border-[#00D97E] hover:text-white'
-                }`}
-                style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-              >
-                {tier.cta}
-              </Link>
+        {/* FAQ */}
+        <div style={{ maxWidth: 880, margin: '96px auto 0' }}>
+          <h2 className="display" style={{ fontSize: 28, marginBottom: 28, letterSpacing: '-0.02em' }}>
+            Common questions
+          </h2>
+          {FAQS.map((f, i) => (
+            <div key={i} style={{ padding: '24px 0', borderBottom: '1px solid var(--border)' }}>
+              <h3 className="display" style={{ fontSize: 18, marginBottom: 12 }}>{f.q}</h3>
+              <p className="muted" style={{ fontSize: 15, lineHeight: 1.6 }}>{f.a}</p>
             </div>
           ))}
         </div>
-
-        {/* FAQ Preview or Note */}
-        <div className="mt-32 pt-20 border-t border-zinc-800/50">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-20">
-            <div>
-              <h4 style={{ fontFamily: "'Space Grotesk', sans-serif" }} className="text-xl font-bold text-white uppercase tracking-tight mb-4">Are there annual discounts?</h4>
-              <p className="text-zinc-500 text-sm leading-relaxed">Yes, save 20% on all plans when billed annually. Contact support to switch your billing cycle.</p>
-            </div>
-            <div>
-              <h4 style={{ fontFamily: "'Space Grotesk', sans-serif" }} className="text-xl font-bold text-white uppercase tracking-tight mb-4">Can I cancel anytime?</h4>
-              <p className="text-zinc-500 text-sm leading-relaxed">Absolutely. Invariant is a month-to-month service with no long-term commitments. Cancel from your dashboard anytime.</p>
-            </div>
-          </div>
-        </div>
-      </main>
-      
-      {/* Footer (Simplified) */}
-      <footer className="border-t border-zinc-800/30">
-        <div className="flex flex-col md:flex-row justify-between items-center w-full px-8 py-10 max-w-7xl mx-auto">
-          <div className="font-mono font-bold text-lg mb-6 md:mb-0 flex items-center gap-1">
-            <span className="text-[#00D97E]">&gt;_</span>
-            <span className="text-white">INVARIANT</span>
-          </div>
-          <div className="text-zinc-600 font-mono text-[10px] tracking-widest uppercase">
-            © 2024 Invariant. All rights reserved.
-          </div>
-        </div>
-      </footer>
-    </div>
+      </div>
+    </AppShell>
   )
 }

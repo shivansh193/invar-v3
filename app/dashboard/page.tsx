@@ -1,168 +1,132 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
-import { Navbar } from '@/components/layout/navbar'
-import { Scan } from '@/lib/store'
-import { formatRelative } from '@/lib/utils'
-
-function DashboardContent() {
-  const [scans, setScans] = useState<Scan[]>([])
-  const [loading, setLoading] = useState(true)
-  const searchParams = useSearchParams()
-  const upgraded = searchParams.get('upgraded') === 'true'
-
-  useEffect(() => {
-    async function fetchScans() {
-      try {
-        const res = await fetch('/api/scans')
-        const data = await res.json()
-        setScans(data.scans || [])
-      } catch (err) {
-        console.error(err)
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchScans()
-  }, [])
-
-  const totalScans = scans.length
-  const totalFindings = scans.reduce((acc, s) => acc + (s.findings?.length || 0), 0)
-  const criticalFindings = scans.reduce((acc, s) =>
-    acc + (s.findings?.filter(f => f.severity === 'CRITICAL').length || 0), 0
-  )
-
-  const baseScore = 100
-  const penalty = (criticalFindings * 15) + (totalFindings * 5)
-  const score = Math.max(0, baseScore - penalty)
-
-  return (
-    <main className="max-w-7xl mx-auto px-8 pt-32 pb-20">
-        {upgraded && (
-          <div className="mb-8 bg-[#00D97E]/10 border border-[#00D97E]/30 px-6 py-4 flex items-center justify-between">
-            <p className="text-sm font-mono text-[#00D97E]">
-              ✓ Welcome to Growth — authenticated scans and advanced features are now unlocked.
-            </p>
-            <Link
-              href="/dashboard"
-              replace
-              className="text-[10px] font-mono text-zinc-500 hover:text-zinc-300 uppercase tracking-widest"
-            >
-              Dismiss
-            </Link>
-          </div>
-        )}
-
-        <header className="mb-12">
-          <h1 className="text-3xl font-bold tracking-tight mb-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-            Security Dashboard
-          </h1>
-          <p className="text-zinc-500 font-mono text-sm tracking-widest uppercase">
-            Real-time attack surface monitoring
-          </p>
-        </header>
-
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
-          <StatCard
-            label="Security Posture"
-            value={`${score}/100`}
-            sub="Based on active findings"
-            color={score > 80 ? 'text-[#00D97E]' : score > 50 ? 'text-yellow-400' : 'text-red-500'}
-          />
-          <StatCard label="Total Scans" value={totalScans.toString()} sub="Lifetime active" />
-          <StatCard label="Open Findings" value={totalFindings.toString()} sub="Requires attention" />
-          <StatCard
-            label="Critical Risk"
-            value={criticalFindings.toString()}
-            sub="Immediate action"
-            color="text-red-500"
-          />
-        </div>
-
-        {/* Recent Scans Table */}
-        <div className="bg-[#0f0f14] border border-zinc-800 rounded-sm">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
-            <h2 className="text-sm font-mono uppercase tracking-widest text-zinc-400">Recent Activity</h2>
-            <Link href="/history" className="text-[10px] font-mono text-[#00D97E] hover:underline uppercase tracking-widest">
-              View all history →
-            </Link>
-          </div>
-          <div className="divide-y divide-zinc-800/50">
-            {loading ? (
-              <div className="p-12 text-center text-zinc-600 font-mono text-xs">Loading activity...</div>
-            ) : scans.length === 0 ? (
-              <div className="p-12 text-center">
-                <p className="text-zinc-500 text-sm mb-4">No recent scans found.</p>
-                <Link
-                  href="/scan/new"
-                  className="inline-block bg-[#00D97E] text-white font-bold px-6 py-2 text-xs uppercase tracking-tighter hover:brightness-110 transition-all"
-                >
-                  Start your first scan
-                </Link>
-              </div>
-            ) : (
-              scans.slice(0, 5).map((scan) => (
-                <div key={scan.id} className="flex items-center justify-between px-6 py-4 hover:bg-white/[0.02] transition-colors group">
-                  <div className="flex items-center gap-4">
-                    <div className={scan.status === 'complete' ? 'text-[#00D97E]' : 'text-yellow-500'}>
-                      <span className="text-[10px] font-mono border border-current px-1.5 py-0.5 uppercase">
-                        {scan.status}
-                      </span>
-                    </div>
-                    <div>
-                      <Link href={`/scan/${scan.id}`} className="text-sm font-medium hover:text-[#00D97E] transition-colors block">
-                        {scan.targetUrl}
-                      </Link>
-                      <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">
-                        {scan.id} • {formatRelative(scan.createdAt)}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-6">
-                    <div className="text-right">
-                      <div className="text-xs font-mono text-zinc-400">{scan.findings.length} findings</div>
-                      <div className="text-[9px] font-mono text-zinc-600 uppercase">
-                        {scan.findings.filter(f => f.severity === 'CRITICAL').length} critical
-                      </div>
-                    </div>
-                    <Link
-                      href={scan.status === 'complete' ? `/scan/${scan.id}` : `/scan/${scan.id}/progress`}
-                      className="text-xs font-mono text-zinc-500 group-hover:text-white transition-colors"
-                    >
-                      DETAILS →
-                    </Link>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-    </main>
-  )
-}
+import { AppShell } from '@/components/layout/app-shell'
+import { Sev, PulseDot } from '@/components/ui/wordmark'
+import { Icons } from '@/components/ui/icons'
+import { FINDINGS, RECENT_SCANS } from '@/lib/design-data'
 
 export default function DashboardPage() {
-  return (
-    <div className="bg-[#0A0A0F] min-h-screen text-[#e4e1e9]">
-      <Navbar />
-      <Suspense fallback={<div className="max-w-7xl mx-auto px-8 pt-32 pb-20 font-mono text-xs text-zinc-500">Loading dashboard...</div>}>
-        <DashboardContent />
-      </Suspense>
-    </div>
-  )
-}
+  const open = { critical: 2, high: 3, medium: 4, low: 1 }
 
-function StatCard({ label, value, sub, color = 'text-white' }: { label: string; value: string; subText?: string; color?: string; sub: string }) {
   return (
-    <div className="bg-[#0f0f14] border border-zinc-800 p-6 rounded-sm">
-      <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-3">{label}</div>
-      <div className={`text-3xl font-bold mb-1 ${color}`} style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-        {value}
+    <AppShell>
+      <div className="page">
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 32 }}>
+          <div>
+            <div className="eyebrow" style={{ marginBottom: 8 }}>WORKSPACE · MOSAIC</div>
+            <h1 className="display" style={{ fontSize: 32, letterSpacing: '-0.02em' }}>Dashboard</h1>
+          </div>
+          <Link href="/scan/new" className="btn btn-primary">
+            Run new scan <Icons.arrow />
+          </Link>
+        </div>
+
+        {/* Stat row */}
+        <div className="stat-row" style={{ marginBottom: 24 }}>
+          <div className="stat warn">
+            <div className="lbl">Security score</div>
+            <div className="v tabular">68<small>/100</small></div>
+            <div className="delta">↓ 4 since last scan</div>
+          </div>
+          <div className="stat danger">
+            <div className="lbl">Open critical findings</div>
+            <div className="v tabular">2</div>
+            <div className="delta">Last scan · today</div>
+          </div>
+          <div className="stat">
+            <div className="lbl">Last scan</div>
+            <div className="v" style={{ fontSize: 28 }}>2 hours ago</div>
+            <div className="delta" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <PulseDot /> Auto-scan: weekly
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, marginTop: 32 }}>
+          <h2 className="display" style={{ fontSize: 20 }}>Open findings</h2>
+          <Link href="/scan/demo" className="muted" style={{ fontSize: 13 }}>View report →</Link>
+        </div>
+
+        <div className="severity-row" style={{ padding: 0, marginBottom: 32 }}>
+          {[
+            { cls: 'crit', label: 'Critical', count: open.critical },
+            { cls: 'high', label: 'High', count: open.high },
+            { cls: 'med', label: 'Medium', count: open.medium },
+            { cls: 'low', label: 'Low', count: open.low },
+          ].map(s => (
+            <div key={s.cls} className={`sev-stat ${s.cls}`} style={{ flex: 1, cursor: 'pointer' }}>
+              <div className="n tabular">{s.count}</div>
+              <div className="l">{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Two-col: recent scans + next steps */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 20 }}>
+          <div className="card">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+              <h3 className="display" style={{ fontSize: 16 }}>Recent scans</h3>
+              <Link href="/history" className="muted" style={{ fontSize: 13 }}>View all →</Link>
+            </div>
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>Target</th>
+                  <th>Date</th>
+                  <th>Type</th>
+                  <th>Findings</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {RECENT_SCANS.map((s, i) => (
+                  <tr key={i} onClick={() => {}}>
+                    <td className="mono" style={{ fontSize: 13 }}>{s.target}</td>
+                    <td className="muted" style={{ fontSize: 13 }}>{s.date}</td>
+                    <td><span className="tag">{s.type}</span></td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        {s.critical > 0 && <span className="sev sev-critical" style={{ fontSize: 10 }}>{s.critical}</span>}
+                        {s.high > 0 && <span className="sev sev-high" style={{ fontSize: 10 }}>{s.high}</span>}
+                        {s.medium > 0 && <span className="sev sev-medium" style={{ fontSize: 10 }}>{s.medium}</span>}
+                        {s.low > 0 && <span className="sev sev-low" style={{ fontSize: 10 }}>{s.low}</span>}
+                      </div>
+                    </td>
+                    <td><span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--accent)', fontSize: 13 }}><Icons.check /> Complete</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="card" style={{ padding: 24 }}>
+            <h3 className="display" style={{ fontSize: 16, marginBottom: 16 }}>Next steps</h3>
+            <p className="muted" style={{ fontSize: 13, marginBottom: 16 }}>
+              Prioritized fixes that close the most risk for the least effort.
+            </p>
+            {[
+              { sev: 'critical', t: 'Fix the IDOR in your user API', e: '2 hrs' },
+              { sev: 'critical', t: 'Invalidate sessions on password change', e: '1 hr' },
+              { sev: 'high', t: 'Add rate limit to login endpoint', e: '2 hrs' },
+            ].map((s, i) => (
+              <div key={i} style={{ padding: '14px 0', borderBottom: i < 2 ? '1px solid var(--border)' : 'none', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                <span className="mono dim" style={{ fontSize: 12, marginTop: 4, width: 16, color: 'var(--text-3)' }}>{i + 1}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, marginBottom: 6 }}>{s.t}</div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <Sev level={s.sev} />
+                    <span className="tag mono">{s.e}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+            <Link href="/scan/demo" className="btn btn-ghost btn-sm" style={{ width: '100%', marginTop: 18 }}>
+              Open all in report →
+            </Link>
+          </div>
+        </div>
       </div>
-      <div className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">{sub}</div>
-    </div>
+    </AppShell>
   )
 }

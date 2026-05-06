@@ -1,141 +1,86 @@
 'use client'
 
-import { useState } from 'react'
 import Link from 'next/link'
+import { useState } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { Navbar } from '@/components/layout/navbar'
+import { Wordmark } from '@/components/ui/wordmark'
+import { Icons } from '@/components/ui/icons'
 
 export default function LoginPage() {
-  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const router = useRouter()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setIsLoading(true)
+    setLoading(true)
     setError('')
-    const result = await signIn('credentials', {
-      email,
-      password,
-      redirect: false,
-    })
-    if (result?.error) {
-      setError('Invalid email or password')
-      setIsLoading(false)
+    const res = await signIn('credentials', { email, password, redirect: false })
+    setLoading(false)
+    if (res?.error) {
+      setError('Invalid email or password.')
     } else {
       router.push('/dashboard')
     }
   }
 
   return (
-    <div className="bg-[#0A0A0F] min-h-screen text-[#e4e1e9] flex flex-col">
-      <Navbar />
+    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--bg)', padding: 24 }}>
+      <div style={{ width: '100%', maxWidth: 400 }}>
+        <div style={{ textAlign: 'center', marginBottom: 40 }}>
+          <Link href="/" style={{ display: 'inline-flex', justifyContent: 'center', marginBottom: 32 }}>
+            <Wordmark size={20} />
+          </Link>
+          <h1 className="display" style={{ fontSize: 28, letterSpacing: '-0.02em', marginBottom: 8 }}>Sign in</h1>
+          <p className="muted" style={{ fontSize: 14 }}>Welcome back to Invariant.</p>
+        </div>
 
-      <main className="flex-grow flex items-center justify-center px-8 py-32">
-        <div className="w-full max-w-md space-y-10">
-          <div className="text-center space-y-4">
-            <h1
-              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-              className="text-4xl font-bold text-white uppercase tracking-tight"
-            >
-              Log in to Invariant
-            </h1>
-            <p className="text-zinc-500 font-mono text-xs uppercase tracking-widest leading-relaxed">
-              Access your security dashboard and reports.
-            </p>
+        <div className="card" style={{ padding: 32 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <button className="btn btn-ghost" style={{ justifyContent: 'flex-start', gap: 12 }} onClick={() => signIn('google', { callbackUrl: '/dashboard' })}>
+              <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+              Continue with Google
+            </button>
+            <button className="btn btn-ghost" style={{ justifyContent: 'flex-start', gap: 12 }} onClick={() => signIn('github', { callbackUrl: '/dashboard' })}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.017C22 6.484 17.522 2 12 2z"/></svg>
+              Continue with GitHub
+            </button>
           </div>
 
-          <div className="space-y-6">
-            <div className="space-y-4">
-              <SocialButton icon="G" label="Continue with Google" onClick={() => signIn('google', { callbackUrl: '/dashboard' })} />
-              <SocialButton icon="GH" label="Continue with GitHub" onClick={() => signIn('github', { callbackUrl: '/dashboard' })} />
-            </div>
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-zinc-800"></div>
-              </div>
-              <div className="relative flex justify-center text-xs uppercase font-mono tracking-widest">
-                <span className="bg-[#0A0A0F] px-4 text-zinc-600">Or with email</span>
-              </div>
-            </div>
-
-            <form className="space-y-5" onSubmit={handleSubmit}>
-              <AuthInput label="Email address" type="email" placeholder="name@company.com" value={email} onChange={setEmail} />
-              <AuthInput label="Password" type="password" placeholder="••••••••••••" value={password} onChange={setPassword} />
-
-              <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" className="w-4 h-4 rounded border-zinc-700 bg-zinc-800 focus:ring-[#00D97E] text-[#00D97E]" />
-                  <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Remember me</span>
-                </label>
-                <Link href="#" className="text-[10px] font-mono text-zinc-500 hover:text-[#00D97E] uppercase tracking-widest">Forgot password?</Link>
-              </div>
-
-              {error && (
-                <p className="text-red-400 font-mono text-xs uppercase tracking-widest">{error}</p>
-              )}
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-                className="w-full bg-[#00D97E] text-white font-bold py-4 uppercase tracking-tighter hover:brightness-110 transition-all text-sm disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {isLoading ? 'Signing in...' : 'Sign In'}
-              </button>
-            </form>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '24px 0' }}>
+            <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+            <span className="muted" style={{ fontSize: 12 }}>or</span>
+            <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
           </div>
 
-          <p className="text-center text-xs font-mono text-zinc-600 uppercase tracking-widest">
-            Don't have an account?{' '}
-            <Link href="/signup" className="text-[#00D97E] hover:underline">Sign up</Link>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <label style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-3)', display: 'block', marginBottom: 6 }}>Email</label>
+              <input className="input" type="email" placeholder="you@yourcompany.com" value={email} onChange={e => setEmail(e.target.value)} required />
+            </div>
+            <div>
+              <label style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-3)', display: 'block', marginBottom: 6 }}>Password</label>
+              <input className="input" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required />
+            </div>
+            {error && <p style={{ color: 'var(--crit)', fontSize: 13 }}>{error}</p>}
+            <button className="btn btn-primary" style={{ marginTop: 4, width: '100%' }} disabled={loading}>
+              {loading ? 'Signing in…' : <><span>Sign in</span> <Icons.arrow /></>}
+            </button>
+          </form>
+
+          <p className="muted" style={{ fontSize: 12, textAlign: 'center', marginTop: 20 }}>
+            Demo: demo@invariant.sh / demo
           </p>
         </div>
-      </main>
-    </div>
-  )
-}
 
-function SocialButton({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full flex items-center justify-center gap-3 border border-zinc-700 bg-zinc-800/20 py-3.5 hover:border-zinc-500 hover:bg-zinc-800/40 transition-all"
-    >
-      <span className="font-bold text-xs uppercase tracking-tighter">{icon}</span>
-      <span className="text-xs font-mono uppercase tracking-widest text-zinc-400">{label}</span>
-    </button>
-  )
-}
-
-function AuthInput({
-  label,
-  type,
-  placeholder,
-  value,
-  onChange,
-}: {
-  label: string
-  type: string
-  placeholder: string
-  value: string
-  onChange: (v: string) => void
-}) {
-  return (
-    <div className="space-y-2">
-      <label className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest block">{label}</label>
-      <input
-        type={type}
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full bg-[#1f1f25] border border-zinc-700 focus:border-[#00D97E] text-white font-mono px-4 py-3.5 text-xs outline-none transition-colors"
-      />
+        <p className="muted" style={{ fontSize: 13, textAlign: 'center', marginTop: 20 }}>
+          No account?{' '}
+          <Link href="/signup" style={{ color: 'var(--accent)' }}>Create one free</Link>
+        </p>
+      </div>
     </div>
   )
 }
