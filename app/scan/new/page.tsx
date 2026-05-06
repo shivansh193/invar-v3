@@ -29,6 +29,14 @@ function NewScanForm() {
   const [password, setPassword] = useState('')
   const [exclusions, setExclusions] = useState('')
   const [isLaunching, setIsLaunching] = useState(false)
+  const [launchError, setLaunchError] = useState<string | null>(null)
+  const [domainVerification, setDomainVerification] = useState<{
+    domain: string
+    domainId: string
+    token: string
+    checking: boolean
+    failed: boolean
+  } | null>(null)
 
   function validateUrl(val: string): boolean {
     try {
@@ -52,6 +60,7 @@ function NewScanForm() {
 
   async function handleLaunch() {
     setIsLaunching(true)
+    setLaunchError(null)
     try {
       const res = await fetch('/api/scans', {
         method: 'POST',
@@ -64,10 +73,53 @@ function NewScanForm() {
           exclusions: exclusions.split('\n').filter(Boolean),
         }),
       })
-      const { id } = await res.json()
-      router.push(`/scan/${id}/progress`)
+      const data = await res.json()
+
+      if (!res.ok) {
+        if (data.error === 'upgrade_required') {
+          setLaunchError('Authenticated scans require a Growth plan. Please upgrade.')
+        } else if (data.error === 'daily_limit_reached') {
+          setLaunchError('Free tier limit: 1 scan per day. Upgrade for unlimited scans.')
+        } else if (data.error === 'domain_not_verified') {
+          setDomainVerification({
+            domain: data.domain,
+            domainId: data.domainId,
+            token: data.token,
+            checking: false,
+            failed: false,
+          })
+        } else {
+          setLaunchError(data.error ?? 'Failed to create scan')
+        }
+        setIsLaunching(false)
+        return
+      }
+
+      router.push(`/scan/${data.id}/progress`)
     } catch {
+      setLaunchError('Something went wrong. Please try again.')
       setIsLaunching(false)
+    }
+  }
+
+  async function handleVerifyDomain() {
+    if (!domainVerification) return
+    setDomainVerification((prev) => prev ? { ...prev, checking: true, failed: false } : null)
+    try {
+      const res = await fetch('/api/domains/verify/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domainId: domainVerification.domainId }),
+      })
+      const data = await res.json()
+      if (data.verified) {
+        setDomainVerification(null)
+        handleLaunch()
+      } else {
+        setDomainVerification((prev) => prev ? { ...prev, checking: false, failed: true } : null)
+      }
+    } catch {
+      setDomainVerification((prev) => prev ? { ...prev, checking: false, failed: true } : null)
     }
   }
 
@@ -299,6 +351,38 @@ function NewScanForm() {
             </div>
           )}
 
+          {domainVerification && (
+            <div className="border border-yellow-500/30 bg-yellow-500/5 p-5 space-y-4">
+              <p className="text-xs font-mono text-yellow-400 uppercase tracking-widest">
+                Domain verification required for <span className="text-white">{domainVerification.domain}</span>
+              </p>
+              <p className="text-[10px] font-mono text-zinc-500 leading-relaxed">
+                Add a DNS TXT record or host a file to prove ownership, then click Verify:
+              </p>
+              <div className="bg-[#0A0A0F] border border-zinc-800 px-4 py-3 font-mono text-xs text-zinc-400 space-y-1">
+                <p>DNS: <span className="text-zinc-300">_invariant-verify.{domainVerification.domain}</span></p>
+                <p>Value: <span className="text-[#00D97E]">invariant-verify={domainVerification.token}</span></p>
+                <p className="pt-1 text-zinc-600">— or —</p>
+                <p>File: <span className="text-zinc-300">https://{domainVerification.domain}/.well-known/invariant-verify.txt</span></p>
+                <p>Contents: <span className="text-[#00D97E]">{domainVerification.token}</span></p>
+              </div>
+              {domainVerification.failed && (
+                <p className="text-red-400 font-mono text-xs">Verification failed — check the record and try again.</p>
+              )}
+              <button
+                onClick={handleVerifyDomain}
+                disabled={domainVerification.checking}
+                className="w-full border border-[#00D97E]/50 text-[#00D97E] font-mono py-3 text-xs uppercase tracking-widest hover:bg-[#00D97E]/10 transition-colors disabled:opacity-50"
+              >
+                {domainVerification.checking ? 'Checking...' : 'Verify Domain →'}
+              </button>
+            </div>
+          )}
+
+          {launchError && (
+            <p className="text-red-400 font-mono text-xs uppercase tracking-widest">{launchError}</p>
+          )}
+
           <div className="flex gap-3">
             <button
               onClick={() => setStep(scanType === 'authenticated' ? 2 : 1)}
@@ -308,7 +392,7 @@ function NewScanForm() {
             </button>
             <button
               onClick={handleLaunch}
-              disabled={isLaunching}
+              disabled={isLaunching || !!domainVerification}
               className="flex-[2] bg-[#00D97E] text-white font-bold py-3.5 uppercase tracking-tighter hover:brightness-110 transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               style={{ fontFamily: "'Space Grotesk', sans-serif" }}
             >

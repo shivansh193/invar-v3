@@ -1,0 +1,59 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String           @id @default(cuid())
+  email                String           @unique
+  name                 String?
+  password             String?
+  plan                 String           @default("free")
+  createdAt            DateTime         @default(now())
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  scans                Scan[]
+  verifiedDomains      VerifiedDomain[]
+}
+
+model Scan {
+  id          String    @id @default(cuid())
+  userId      String
+  url         String
+  status      String    @default("pending")
+  mode        String    @default("unauthenticated")
+  depth       String    @default("standard")
+  summary     String?
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+  user        User      @relation(fields: [userId], references: [id])
+  findings    Finding[]
+}
+
+model Finding {
+  id          String   @id @default(cuid())
+  scanId      String
+  title       String
+  severity    String
+  category    String
+  description String
+  evidence    String
+  remediation String
+  status      String   @default("open")
+  createdAt   DateTime @default(now())
+  scan        Scan     @relation(fields: [scanId], references: [id])
+}
+
+model VerifiedDomain {
+  id        String   @id @default(cuid())
+  userId    String
+  domain    String
+  verified  Boolean  @default(false)
+  token     String   @unique @default(cuid())
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+}

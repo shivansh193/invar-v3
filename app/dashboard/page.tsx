@@ -1,15 +1,17 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { Navbar } from '@/components/layout/navbar'
-import { SeverityBadge } from '@/components/ui/severity-badge'
-import { Scan, Finding } from '@/lib/store'
+import { Scan } from '@/lib/store'
 import { formatRelative } from '@/lib/utils'
 
-export default function DashboardPage() {
+function DashboardContent() {
   const [scans, setScans] = useState<Scan[]>([])
   const [loading, setLoading] = useState(true)
+  const searchParams = useSearchParams()
+  const upgraded = searchParams.get('upgraded') === 'true'
 
   useEffect(() => {
     async function fetchScans() {
@@ -28,20 +30,31 @@ export default function DashboardPage() {
 
   const totalScans = scans.length
   const totalFindings = scans.reduce((acc, s) => acc + (s.findings?.length || 0), 0)
-  const criticalFindings = scans.reduce((acc, s) => 
+  const criticalFindings = scans.reduce((acc, s) =>
     acc + (s.findings?.filter(f => f.severity === 'CRITICAL').length || 0), 0
   )
-  
-  // Basic security posture score calculation
+
   const baseScore = 100
   const penalty = (criticalFindings * 15) + (totalFindings * 5)
   const score = Math.max(0, baseScore - penalty)
 
   return (
-    <div className="bg-[#0A0A0F] min-h-screen text-[#e4e1e9]">
-      <Navbar />
-      
-      <main className="max-w-7xl mx-auto px-8 pt-32 pb-20">
+    <main className="max-w-7xl mx-auto px-8 pt-32 pb-20">
+        {upgraded && (
+          <div className="mb-8 bg-[#00D97E]/10 border border-[#00D97E]/30 px-6 py-4 flex items-center justify-between">
+            <p className="text-sm font-mono text-[#00D97E]">
+              ✓ Welcome to Growth — authenticated scans and advanced features are now unlocked.
+            </p>
+            <Link
+              href="/dashboard"
+              replace
+              className="text-[10px] font-mono text-zinc-500 hover:text-zinc-300 uppercase tracking-widest"
+            >
+              Dismiss
+            </Link>
+          </div>
+        )}
+
         <header className="mb-12">
           <h1 className="text-3xl font-bold tracking-tight mb-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
             Security Dashboard
@@ -53,18 +66,18 @@ export default function DashboardPage() {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
-          <StatCard 
-            label="Security Posture" 
-            value={`${score}/100`} 
+          <StatCard
+            label="Security Posture"
+            value={`${score}/100`}
             sub="Based on active findings"
             color={score > 80 ? 'text-[#00D97E]' : score > 50 ? 'text-yellow-400' : 'text-red-500'}
           />
           <StatCard label="Total Scans" value={totalScans.toString()} sub="Lifetime active" />
           <StatCard label="Open Findings" value={totalFindings.toString()} sub="Requires attention" />
-          <StatCard 
-            label="Critical Risk" 
-            value={criticalFindings.toString()} 
-            sub="Immediate action" 
+          <StatCard
+            label="Critical Risk"
+            value={criticalFindings.toString()}
+            sub="Immediate action"
             color="text-red-500"
           />
         </div>
@@ -83,7 +96,7 @@ export default function DashboardPage() {
             ) : scans.length === 0 ? (
               <div className="p-12 text-center">
                 <p className="text-zinc-500 text-sm mb-4">No recent scans found.</p>
-                <Link 
+                <Link
                   href="/scan/new"
                   className="inline-block bg-[#00D97E] text-white font-bold px-6 py-2 text-xs uppercase tracking-tighter hover:brightness-110 transition-all"
                 >
@@ -115,7 +128,7 @@ export default function DashboardPage() {
                         {scan.findings.filter(f => f.severity === 'CRITICAL').length} critical
                       </div>
                     </div>
-                    <Link 
+                    <Link
                       href={scan.status === 'complete' ? `/scan/${scan.id}` : `/scan/${scan.id}/progress`}
                       className="text-xs font-mono text-zinc-500 group-hover:text-white transition-colors"
                     >
@@ -127,7 +140,17 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
-      </main>
+    </main>
+  )
+}
+
+export default function DashboardPage() {
+  return (
+    <div className="bg-[#0A0A0F] min-h-screen text-[#e4e1e9]">
+      <Navbar />
+      <Suspense fallback={<div className="max-w-7xl mx-auto px-8 pt-32 pb-20 font-mono text-xs text-zinc-500">Loading dashboard...</div>}>
+        <DashboardContent />
+      </Suspense>
     </div>
   )
 }

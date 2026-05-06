@@ -1,3 +1,4 @@
+import { prisma } from './prisma'
 import { ScanType, ScanDepth } from './types'
 
 export interface Finding {
@@ -12,71 +13,112 @@ export interface Finding {
 
 export interface Scan {
   id: string
+  userId: string
   targetUrl: string
   type: ScanType
   depth: ScanDepth
-  status: 'queued' | 'scanning' | 'complete' | 'failed'
+  status: 'pending' | 'running' | 'complete' | 'failed'
   findings: Finding[]
   createdAt: string
 }
 
-// In-memory store for the current runtime session
-class MemoryStore {
-  private scans: Map<string, Scan> = new Map()
-
-  constructor() {
-    console.log('In-memory store initialized')
-  }
-
-  createScan(data: Omit<Scan, 'id' | 'status' | 'findings' | 'createdAt'>): Scan {
-    const id = Math.random().toString(36).substring(2, 10).toUpperCase()
-    const scan: Scan = {
-      ...data,
-      id,
-      status: 'queued',
-      findings: [],
-      createdAt: new Date().toISOString()
-    }
-    this.scans.set(id, scan)
-    return scan
-  }
-
-  getScan(id: string): Scan | undefined {
-    return this.scans.get(id)
-  }
-
-  getAllScans(): Scan[] {
-    return Array.from(this.scans.values()).sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    )
-  }
-
-  updateScanStatus(id: string, status: Scan['status']) {
-    const scan = this.scans.get(id)
-    if (scan) {
-      scan.status = status
-      this.scans.set(id, scan)
-    }
-  }
-
-  addFinding(id: string, finding: Omit<Finding, 'id' | 'createdAt'>) {
-    const scan = this.scans.get(id)
-    if (scan) {
-      const newFinding: Finding = {
-        ...finding,
-        id: `F-${Math.floor(1000 + Math.random() * 9000)}`,
-        createdAt: new Date().toISOString()
-      }
-      scan.findings.push(newFinding)
-      this.scans.set(id, scan)
-      return newFinding
-    }
-    return null
+function dbScanToScan(dbScan: any): Scan {
+  return {
+    id: dbScan.id,
+    userId: dbScan.userId,
+    targetUrl: dbScan.url,
+    type: dbScan.mode as ScanType,
+    depth: dbScan.depth as ScanDepth,
+    status: dbScan.status as Scan['status'],
+    findings: (dbScan.findings ?? []).map(dbFindingToFinding),
+    createdAt: dbScan.createdAt instanceof Date
+      ? dbScan.createdAt.toISOString()
+      : dbScan.createdAt,
   }
 }
 
-// Singleton instance
-const globalForStore = globalThis as unknown as { store: MemoryStore }
-export const store = globalForStore.store ?? new MemoryStore()
+function dbFindingToFinding(f: any): Finding {
+  return {
+    id: f.id,
+    title: f.title,
+    severity: f.severity as Finding['severity'],
+    description: f.description,
+    evidence: f.evidence,
+    remediation: f.remediation,
+    createdAt: f.createdAt instanceof Date ? f.createdAt.toISOString() : f.createdAt,
+  }
+}
 
-if (process.env.NODE_ENV !== 'production') globalForStore.store = store
+export const store = {
+  async createScan(data: {
+    targetUrl: string
+    type: ScanType
+    depth: ScanDepth
+    userId: string
+  }): Promise<Scan> {
+    const dbScan = await prisma.scan.create({
+      data: {
+        url: data.targetUrl,
+        mode: data.type,
+        depth: data.depth,
+        userId: data.userId,
+        status: 'pending',
+      },
+      include: { findings: true },
+    })
+    return dbScanToScan(dbScan)
+  },
+
+  async getScan(id: string): Promise<Scan | null> {
+    const dbScan = await prisma.scan.findUnique({
+      where: { id },
+      include: { findings: true },
+    })
+    return dbScan ? dbScanToScan(dbScan) : null
+  },
+
+  async getAllScans(): Promise<Scan[]> {
+    const dbScans = await prisma.scan.findMany({
+      include: { findings: true },
+      orderBy: { createdAt: 'desc' },
+    })
+    return dbScans.map(dbScanToScan)
+  },
+
+  async getScansByUser(userId: string): Promise<Scan[]> {
+    const dbScans = await prisma.scan.findMany({
+      where: { userId },
+      include: { findings: true },
+      orderBy: { createdAt: 'desc' },
+    })
+    return dbScans.map(dbScanToScan)
+  },
+
+  async updateScanStatus(id: string, status: Scan['status']): Promise<void> {
+    const data: any = { status }
+    if (status === 'complete' || status === 'failed') {
+      data.completedAt = new Date()
+    }
+    await prisma.scan.update({ where: { id }, data })
+  },
+
+  async addFinding(
+    id: string,
+    finding: Omit<Finding, 'id' | 'createdAt'>
+  ): Promise<Finding | null> {
+    const scan = await prisma.scan.findUnique({ where: { id } })
+    if (!scan) return null
+    const dbFinding = await prisma.finding.create({
+      data: {
+        scanId: id,
+        title: finding.title,
+        severity: finding.severity,
+        category: 'vulnerability',
+        description: finding.description,
+        evidence: finding.evidence,
+        remediation: finding.remediation,
+      },
+    })
+    return dbFindingToFinding(dbFinding)
+  },
+}

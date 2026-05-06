@@ -2,12 +2,10 @@ import NextAuth, { NextAuthOptions } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
 import GitHubProvider from 'next-auth/providers/github'
 import CredentialsProvider from 'next-auth/providers/credentials'
-// import { PrismaAdapter } from '@auth/prisma-adapter'
-// import { prisma } from '@/lib/prisma'
-// import bcrypt from 'bcryptjs'
+import bcrypt from 'bcryptjs'
+import { prisma } from '@/lib/prisma'
 
 export const authOptions: NextAuthOptions = {
-  // adapter: PrismaAdapter(prisma),
   session: { strategy: 'jwt' },
   pages: {
     signIn: '/login',
@@ -31,18 +29,15 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null
 
-        // In production:
-        // const user = await prisma.user.findUnique({ where: { email: credentials.email } })
-        // if (!user || !user.passwordHash) return null
-        // const valid = await bcrypt.compare(credentials.password, user.passwordHash)
-        // if (!valid) return null
-        // return { id: user.id, email: user.email, name: user.name, plan: user.plan }
+        const user = await prisma.user.findUnique({
+          where: { email: credentials.email },
+        })
+        if (!user || !user.password) return null
 
-        // Dev mock
-        if (credentials.email === 'demo@invariant.sh' && credentials.password === 'demo') {
-          return { id: 'user_1', email: 'demo@invariant.sh', name: 'Demo User' }
-        }
-        return null
+        const valid = await bcrypt.compare(credentials.password, user.password)
+        if (!valid) return null
+
+        return { id: user.id, email: user.email, name: user.name ?? undefined, plan: user.plan }
       },
     }),
   ],
@@ -50,14 +45,14 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id
-        // token.plan = (user as any).plan ?? 'free'
+        token.plan = (user as any).plan ?? 'free'
       }
       return token
     },
     async session({ session, token }) {
       if (session.user) {
         (session.user as any).id = token.id
-        // (session.user as any).plan = token.plan
+        ;(session.user as any).plan = token.plan
       }
       return session
     },
