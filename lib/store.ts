@@ -104,7 +104,7 @@ export const store = {
 
   async addFinding(
     id: string,
-    finding: Omit<Finding, 'id' | 'createdAt'>
+    finding: Omit<Finding, 'id' | 'createdAt'> & { category?: string }
   ): Promise<Finding | null> {
     const scan = await prisma.scan.findUnique({ where: { id } })
     if (!scan) return null
@@ -113,7 +113,7 @@ export const store = {
         scanId: id,
         title: finding.title,
         severity: finding.severity,
-        category: 'vulnerability',
+        category: (finding as any).category ?? 'Security',
         description: finding.description,
         evidence: finding.evidence,
         remediation: finding.remediation,

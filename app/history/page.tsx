@@ -1,13 +1,58 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { AppShell } from '@/components/layout/app-shell'
 import { Icons } from '@/components/ui/icons'
-import { RECENT_SCANS } from '@/lib/design-data'
 
-const ALL_SCANS = [...RECENT_SCANS, ...RECENT_SCANS, ...RECENT_SCANS.slice(0, 2)].map((s, i) => ({ ...s, _i: i }))
+interface Finding {
+  id: string
+  severity: string
+}
+
+interface Scan {
+  id: string
+  targetUrl: string
+  type: string
+  status: string
+  findings: Finding[]
+  createdAt: string
+}
+
+function formatDate(dateStr: string): string {
+  const d = new Date(dateStr)
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
+    ' · ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+}
+
+function countBySeverity(findings: Finding[]) {
+  const c = { critical: 0, high: 0, medium: 0 }
+  for (const f of findings) {
+    const s = f.severity.toLowerCase() as keyof typeof c
+    if (s in c) c[s]++
+  }
+  return c
+}
 
 export default function HistoryPage() {
+  const router = useRouter()
+  const [scans, setScans] = useState<Scan[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/scans')
+      .then(r => {
+        if (r.status === 401) { router.push('/login'); return null }
+        return r.json()
+      })
+      .then(data => {
+        if (data?.scans) setScans(data.scans)
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [router])
+
   return (
     <AppShell>
       <div className="page">
@@ -26,37 +71,71 @@ export default function HistoryPage() {
           <button className="btn btn-subtle btn-sm">All scan types ▾</button>
           <button className="btn btn-subtle btn-sm">Min severity ▾</button>
           <span style={{ flex: 1 }} />
-          <span className="muted" style={{ fontSize: 13 }}>{ALL_SCANS.length} scans</span>
+          <span className="muted" style={{ fontSize: 13 }}>
+            {loading ? '—' : `${scans.length} scan${scans.length !== 1 ? 's' : ''}`}
+          </span>
         </div>
 
-        <div className="card">
-          <table className="data">
-            <thead>
-              <tr>
-                <th>Target URL</th>
-                <th>Date</th>
-                <th>Type</th>
-                <th>Critical</th>
-                <th>High</th>
-                <th>Medium</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ALL_SCANS.map((s, i) => (
-                <tr key={i}>
-                  <td className="mono" style={{ fontSize: 13 }}>{s.target}</td>
-                  <td className="muted" style={{ fontSize: 13 }}>{s.date}</td>
-                  <td><span className="tag">{s.type}</span></td>
-                  <td><span className="sev sev-critical" style={{ fontSize: 10, opacity: s.critical ? 1 : 0.3 }}>{s.critical}</span></td>
-                  <td><span className="sev sev-high" style={{ fontSize: 10, opacity: s.high ? 1 : 0.3 }}>{s.high}</span></td>
-                  <td><span className="sev sev-medium" style={{ fontSize: 10, opacity: s.medium ? 1 : 0.3 }}>{s.medium}</span></td>
-                  <td><span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--accent)', fontSize: 13 }}><Icons.check /> Complete</span></td>
+        {loading ? (
+          <div className="card" style={{ padding: 40, textAlign: 'center' }}>
+            <span className="muted" style={{ fontSize: 13 }}>Loading...</span>
+          </div>
+        ) : scans.length === 0 ? (
+          <div className="card" style={{ padding: 48, textAlign: 'center' }}>
+            <div style={{ fontSize: 18, marginBottom: 12 }}>No scans yet</div>
+            <p className="muted" style={{ fontSize: 13, marginBottom: 24 }}>Your scan history will appear here.</p>
+            <Link href="/scan/new" className="btn btn-primary">Run first scan <Icons.arrow /></Link>
+          </div>
+        ) : (
+          <div className="card">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>Target URL</th>
+                  <th>Date</th>
+                  <th>Type</th>
+                  <th>Critical</th>
+                  <th>High</th>
+                  <th>Medium</th>
+                  <th>Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {scans.map(s => {
+                  const c = countBySeverity(s.findings)
+                  let hostname = s.targetUrl
+                  try { hostname = new URL(s.targetUrl).hostname } catch {}
+                  return (
+                    <tr key={s.id} style={{ cursor: 'pointer' }} onClick={() => router.push(`/scan/${s.id}`)}>
+                      <td className="mono" style={{ fontSize: 13 }}>{hostname}</td>
+                      <td className="muted" style={{ fontSize: 13 }}>{formatDate(s.createdAt)}</td>
+                      <td><span className="tag">{s.type === 'authenticated' ? 'Authenticated' : 'Public'}</span></td>
+                      <td><span className="sev sev-critical" style={{ fontSize: 10, opacity: c.critical ? 1 : 0.3 }}>{c.critical}</span></td>
+                      <td><span className="sev sev-high" style={{ fontSize: 10, opacity: c.high ? 1 : 0.3 }}>{c.high}</span></td>
+                      <td><span className="sev sev-medium" style={{ fontSize: 10, opacity: c.medium ? 1 : 0.3 }}>{c.medium}</span></td>
+                      <td>
+                        {s.status === 'complete' && (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--accent)', fontSize: 13 }}>
+                            <Icons.check /> Complete
+                          </span>
+                        )}
+                        {s.status === 'running' && (
+                          <span style={{ fontSize: 13, color: 'var(--text-2)' }}>Running...</span>
+                        )}
+                        {s.status === 'pending' && (
+                          <span style={{ fontSize: 13, color: 'var(--text-3)' }}>Pending</span>
+                        )}
+                        {s.status === 'failed' && (
+                          <span style={{ fontSize: 13, color: 'var(--danger)' }}>Failed</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </AppShell>
   )

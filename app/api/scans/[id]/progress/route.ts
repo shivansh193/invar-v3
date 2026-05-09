@@ -3,6 +3,9 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { store } from '@/lib/store'
 import { assertScanOwnership, ScanNotFoundError } from '@/lib/scan-auth'
+import { runScan } from '@/lib/scanner'
+
+export const maxDuration = 120 // Vercel: allow up to 2 minutes for a scan
 
 export async function GET(
   req: NextRequest,
@@ -35,58 +38,86 @@ export async function GET(
 
   const stream = new ReadableStream({
     async start(controller) {
+      let closed = false
+
       const sendEvent = (data: any, name?: string) => {
-        if (name) {
-          controller.enqueue(
-            encoder.encode(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`)
-          )
-        } else {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
-        }
+        if (closed) return
+        const payload = name
+          ? `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`
+          : `data: ${JSON.stringify(data)}\n\n`
+        controller.enqueue(encoder.encode(payload))
       }
 
-      // 1. Initial State
+      // If scan already completed, replay existing findings and close
+      const existingScan = await store.getScan(id)
+      if (existingScan?.status === 'complete') {
+        for (const f of existingScan.findings) {
+          sendEvent({ progress: 100, message: `[FOUND] ${f.title}`, finding: f })
+        }
+        sendEvent({ progress: 100, message: 'Scan complete. Report ready.' }, 'complete')
+        controller.close()
+        return
+      }
+
       await store.updateScanStatus(id, 'running')
       const scan = await store.getScan(id)
-      sendEvent({ progress: 5, message: `Initializing engine for ${scan?.targetUrl}...` })
-      await new Promise((r) => setTimeout(r, 800))
+      const targetUrl = scan?.targetUrl ?? ''
 
-      // 2. Discovering components
-      sendEvent({ progress: 15, message: '[DISCOVER] Mapping attack surface...' })
-      await new Promise((r) => setTimeout(r, 1200))
-      sendEvent({ progress: 25, message: '[DISCOVER] Found 14 active endpoints' })
+      try {
+        const findings = await runScan(targetUrl, (event, eventName) => {
+          if (event.finding) {
+            // Persist finding to DB then stream it
+            store.addFinding(id, {
+              title: event.finding.title,
+              severity: event.finding.severity,
+              category: event.finding.category,
+              description: event.finding.description,
+              evidence: event.finding.evidence,
+              remediation: event.finding.remediation,
+            }).then((saved) => {
+              sendEvent({
+                progress: event.progress,
+                message: event.message,
+                finding: saved ?? event.finding,
+              })
+            })
+          } else {
+            sendEvent({ progress: event.progress, message: event.message }, eventName)
+          }
+        })
 
-      // 3. Finding vulnerabilities
-      sendEvent({ progress: 40, message: '[Fuzzer] Testing for BROKEN ACCESS CONTROL...' })
-      await new Promise((r) => setTimeout(r, 1500))
+        // Small delay so the last DB writes finish before we mark complete
+        await new Promise<void>((r) => setTimeout(r, 800))
 
-      const finding1 = await store.addFinding(id, {
-        title: 'Broken Access Control (IDOR)',
-        severity: 'HIGH',
-        description: 'Unauthorized access to user profile data via parameter manipulation.',
-        evidence: 'GET /api/users/1004 returns profile for user 1004 without session token.',
-        remediation: 'Implement server-side ownership checks before returning user data.',
-      })
-      sendEvent({ progress: 60, message: `[CRITICAL] VULNERABILITY FOUND: ${finding1?.title}` })
+        await store.updateScanStatus(id, 'complete')
 
-      sendEvent({ progress: 70, message: '[Fuzzer] Testing JWT validation...' })
-      await new Promise((r) => setTimeout(r, 2000))
+        const total = findings.length
+        const crits = findings.filter((f) => f.severity === 'CRITICAL').length
+        const highs = findings.filter((f) => f.severity === 'HIGH').length
+        const summary = [
+          crits > 0 && `${crits} critical`,
+          highs > 0 && `${highs} high`,
+        ]
+          .filter(Boolean)
+          .join(' · ')
 
-      const finding2 = await store.addFinding(id, {
-        title: 'JWT Secret Collision',
-        severity: 'CRITICAL',
-        description: 'Common weak secret used for signing JSON Web Tokens.',
-        evidence: 'Token signed with "secret" was accepted as valid.',
-        remediation: 'Rotate signing keys and use a strong, unique secret stored in a vault.',
-      })
-      sendEvent({ progress: 85, message: `[CRITICAL] VULNERABILITY FOUND: ${finding2?.title}` })
+        sendEvent(
+          {
+            progress: 100,
+            message: `Scan complete. ${total} finding${total !== 1 ? 's' : ''}${summary ? ' — ' + summary : ''}.`,
+          },
+          'complete',
+        )
+      } catch (err) {
+        console.error('Scanner error:', err)
+        await store.updateScanStatus(id, 'failed')
+        sendEvent(
+          { progress: 100, message: `Scan failed: ${(err as Error).message}` },
+          'complete',
+        )
+      }
 
-      // 4. Cleanup and Complete
-      sendEvent({ progress: 95, message: '[CLEANUP] Generating final report...' })
-      await store.updateScanStatus(id, 'complete')
-      await new Promise((r) => setTimeout(r, 1000))
-
-      sendEvent({ progress: 100, message: 'Scan complete. Report ready.' }, 'complete')
+      closed = true
       controller.close()
     },
   })

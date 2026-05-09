@@ -1,12 +1,77 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { AppShell } from '@/components/layout/app-shell'
 import { Wordmark, Sev, PulseDot } from '@/components/ui/wordmark'
 import { Icons } from '@/components/ui/icons'
 import { FINDINGS, SAMPLE_TARGET, COMPANY_NAME, DesignFinding } from '@/lib/design-data'
 
-function FindingItem({ finding, open, onToggle }: { finding: DesignFinding; open: boolean; onToggle: () => void }) {
+interface DbFinding {
+  id: string
+  title: string
+  severity: string
+  category: string
+  description: string
+  evidence: string
+  remediation: string
+  createdAt: string
+}
+
+interface DbScan {
+  id: string
+  targetUrl: string
+  type: string
+  status: string
+  findings: DbFinding[]
+  createdAt: string
+}
+
+type UnifiedFinding = {
+  id: string
+  severity: string
+  category: string
+  title: string
+  effort?: string
+  short: string
+  means: string
+  matters?: string
+  evidence: string
+  fix: string
+  code?: string | null
+}
+
+function dbToUnified(f: DbFinding): UnifiedFinding {
+  return {
+    id: f.id,
+    severity: f.severity.toLowerCase(),
+    category: f.category || 'Security',
+    title: f.title,
+    short: f.description.split('\n')[0],
+    means: f.description,
+    evidence: f.evidence,
+    fix: f.remediation,
+  }
+}
+
+function designToUnified(f: DesignFinding): UnifiedFinding {
+  return {
+    id: f.id,
+    severity: f.severity,
+    category: f.category,
+    title: f.title,
+    effort: f.effort,
+    short: f.short,
+    means: f.means,
+    matters: f.matters,
+    evidence: f.evidence,
+    fix: f.fix,
+    code: f.code,
+  }
+}
+
+function FindingItem({ finding, open, onToggle }: { finding: UnifiedFinding; open: boolean; onToggle: () => void }) {
   return (
     <div className={`finding ${open ? 'open' : ''}`}>
       <div className="finding-head" onClick={onToggle}>
@@ -14,7 +79,7 @@ function FindingItem({ finding, open, onToggle }: { finding: DesignFinding; open
         <div className="title">{finding.title}</div>
         <div className="meta">
           <span className="tag">{finding.category}</span>
-          <span className="tag mono">{finding.effort}</span>
+          {finding.effort && <span className="tag mono">{finding.effort}</span>}
           <span className="chev"><Icons.chevron /></span>
         </div>
       </div>
@@ -28,10 +93,12 @@ function FindingItem({ finding, open, onToggle }: { finding: DesignFinding; open
               <div className="lbl">What this means</div>
               <p>{finding.means}</p>
             </div>
-            <div className="finding-section">
-              <div className="lbl">Why this matters</div>
-              <p>{finding.matters}</p>
-            </div>
+            {finding.matters && (
+              <div className="finding-section">
+                <div className="lbl">Why this matters</div>
+                <p>{finding.matters}</p>
+              </div>
+            )}
             <div className="finding-section">
               <div className="lbl">How we found it</div>
               <pre className="evidence">{finding.evidence}</pre>
@@ -41,10 +108,12 @@ function FindingItem({ finding, open, onToggle }: { finding: DesignFinding; open
               <p>{finding.fix}</p>
               {finding.code && <pre className="evidence" style={{ marginTop: 12 }}>{finding.code}</pre>}
             </div>
-            <div className="finding-section">
-              <div className="lbl">Effort estimate</div>
-              <p className="inline-meta">A competent developer can fix this in approximately <b style={{ color: 'var(--text)' }}>{finding.effort}</b>.</p>
-            </div>
+            {finding.effort && (
+              <div className="finding-section">
+                <div className="lbl">Effort estimate</div>
+                <p className="inline-meta">A competent developer can fix this in approximately <b style={{ color: 'var(--text)' }}>{finding.effort}</b>.</p>
+              </div>
+            )}
             <div className="finding-foot">
               <button className="btn btn-subtle btn-sm"><Icons.check /> Mark as fixed</button>
               <button className="btn btn-subtle btn-sm"><Icons.share /> Share this finding</button>
@@ -57,17 +126,104 @@ function FindingItem({ finding, open, onToggle }: { finding: DesignFinding; open
   )
 }
 
+function countBySeverity(findings: UnifiedFinding[]) {
+  const c = { critical: 0, high: 0, medium: 0, low: 0, info: 0 }
+  for (const f of findings) {
+    const s = f.severity as keyof typeof c
+    if (s in c) c[s]++
+  }
+  return c
+}
+
 export default function ReportPage() {
+  const { id } = useParams<{ id: string }>()
+  const router = useRouter()
   const [filter, setFilter] = useState('all')
-  const [openId, setOpenId] = useState<string | null>('f1')
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [scan, setScan] = useState<DbScan | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  const counts = useMemo(() => {
-    const c = { critical: 0, high: 0, medium: 0, low: 0, info: 0 }
-    FINDINGS.forEach(f => { c[f.severity]++ })
-    return c
-  }, [])
+  const isDemo = id === 'demo'
 
-  const filtered = filter === 'all' ? FINDINGS : FINDINGS.filter(f => f.severity === filter)
+  useEffect(() => {
+    if (isDemo) {
+      setLoading(false)
+      setOpenId(FINDINGS[0]?.id ?? null)
+      return
+    }
+    fetch(`/api/scans/${id}`)
+      .then(r => {
+        if (r.status === 401) { router.push('/login'); return null }
+        if (r.status === 404) { setScan(null); setLoading(false); return null }
+        return r.json()
+      })
+      .then(data => {
+        if (data?.scan) {
+          setScan(data.scan)
+          const firstId = data.scan.findings[0]?.id ?? null
+          setOpenId(firstId)
+        }
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [id, isDemo, router])
+
+  const unified: UnifiedFinding[] = useMemo(() => {
+    if (isDemo) return FINDINGS.map(designToUnified)
+    if (!scan) return []
+    return scan.findings
+      .map(dbToUnified)
+      .sort((a, b) => {
+        const order: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 }
+        return (order[a.severity] ?? 5) - (order[b.severity] ?? 5)
+      })
+  }, [isDemo, scan])
+
+  const counts = useMemo(() => countBySeverity(unified), [unified])
+  const filtered = filter === 'all' ? unified : unified.filter(f => f.severity === filter)
+
+  const targetUrl = isDemo ? SAMPLE_TARGET : (scan ? new URL(scan.targetUrl).hostname : '—')
+  const companyName = isDemo ? COMPANY_NAME : (scan ? new URL(scan.targetUrl).hostname.split('.').slice(-2)[0] : '')
+  const scanDate = isDemo
+    ? 'May 6, 2026'
+    : scan
+    ? new Date(scan.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    : '—'
+  const scanType = isDemo ? 'Authenticated assessment' : scan ? (scan.type === 'authenticated' ? 'Authenticated assessment' : 'Public assessment') : '—'
+
+  const topSeverity = counts.critical > 0
+    ? 'CRITICAL'
+    : counts.high > 0
+    ? 'HIGH'
+    : counts.medium > 0
+    ? 'MEDIUM'
+    : counts.low > 0
+    ? 'LOW'
+    : 'CLEAN'
+
+  const gradeClass = topSeverity === 'CRITICAL' ? 'crit' : topSeverity === 'HIGH' ? 'high' : topSeverity === 'MEDIUM' ? 'med' : ''
+
+  if (loading) {
+    return (
+      <AppShell>
+        <div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300 }}>
+          <span className="muted" style={{ fontSize: 13 }}>Loading report...</span>
+        </div>
+      </AppShell>
+    )
+  }
+
+  if (!isDemo && !scan) {
+    return (
+      <AppShell>
+        <div className="page" style={{ textAlign: 'center', paddingTop: 80 }}>
+          <div style={{ fontSize: 18, marginBottom: 12 }}>Report not found</div>
+          <p className="muted" style={{ fontSize: 13, marginBottom: 24 }}>This scan doesn&apos;t exist or you don&apos;t have access to it.</p>
+          <Link href="/dashboard" className="btn btn-ghost">Back to dashboard</Link>
+        </div>
+      </AppShell>
+    )
+  }
 
   return (
     <AppShell>
@@ -82,22 +238,22 @@ export default function ReportPage() {
             </div>
             <div className="report-title-row">
               <div>
-                <h1 className="report-h">{COMPANY_NAME} Security Assessment</h1>
+                <h1 className="report-h">{companyName ? companyName.charAt(0).toUpperCase() + companyName.slice(1) : ''} Security Assessment</h1>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
-                  <span className="report-target">{SAMPLE_TARGET}</span>
+                  <span className="report-target">{targetUrl}</span>
                   <span className="muted">·</span>
-                  <span className="muted" style={{ fontSize: 13 }}>May 6, 2026</span>
+                  <span className="muted" style={{ fontSize: 13 }}>{scanDate}</span>
                   <span className="muted">·</span>
-                  <span className="muted" style={{ fontSize: 13 }}>Authenticated assessment</span>
-                  <span className="muted">·</span>
-                  <span className="muted" style={{ fontSize: 13 }}>Run time: 7m 22s</span>
+                  <span className="muted" style={{ fontSize: 13 }}>{scanType}</span>
                 </div>
               </div>
-              <div className="grade-card crit">
-                <div className="lbl">Overall grade</div>
-                <div className="v">CRITICAL</div>
-                <div className="sub">Findings require remediation</div>
-              </div>
+              {topSeverity !== 'CLEAN' && (
+                <div className={`grade-card ${gradeClass}`}>
+                  <div className="lbl">Overall grade</div>
+                  <div className="v">{topSeverity}</div>
+                  <div className="sub">Findings require remediation</div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -105,11 +261,17 @@ export default function ReportPage() {
           <div className="exec-summary">
             <div className="lbl">Executive summary</div>
             <p>
-              This assessment identified <b>{counts.critical} critical</b> and <b>{counts.high} high</b> severity
-              vulnerabilities in {COMPANY_NAME}&rsquo;s application. The most significant finding allows any
-              authenticated user to access other users&rsquo; private data — including email, billing
-              information, and account history. <b>Immediate remediation of the critical findings is
-              recommended before sharing customer data with enterprise clients.</b>
+              {unified.length === 0
+                ? <>This assessment found <b>no vulnerabilities</b>. The application appears clean based on automated testing.</>
+                : <>
+                    This assessment identified
+                    {counts.critical > 0 && <> <b>{counts.critical} critical</b></>}
+                    {counts.high > 0 && <>{counts.critical > 0 ? ' and' : ''} <b>{counts.high} high</b></>}
+                    {(counts.critical > 0 || counts.high > 0) && ' severity'}
+                    {' '}vulnerabilities in the {companyName} application.
+                    {counts.critical > 0 && <> <b>Immediate remediation of the critical findings is recommended.</b></>}
+                  </>
+              }
             </p>
           </div>
 
@@ -133,7 +295,7 @@ export default function ReportPage() {
           <div className="report-actions">
             <button className="btn btn-primary"><Icons.download /> Download PDF</button>
             <button className="btn btn-ghost"><Icons.share /> Share report</button>
-            <button className="btn btn-ghost"><Icons.refresh /> Run new scan</button>
+            <Link href="/scan/new" className="btn btn-ghost"><Icons.refresh /> Run new scan</Link>
             <span style={{ flex: 1 }} />
             <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-2)', fontSize: 13 }}>
               <PulseDot /> Report active · last refreshed today
@@ -156,20 +318,26 @@ export default function ReportPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-2)', fontSize: 13 }}>
               <span>Sorted by severity</span>
               <span>·</span>
-              <span>{filtered.length} of {FINDINGS.length} findings</span>
+              <span>{filtered.length} of {unified.length} findings</span>
             </div>
           </div>
 
           {/* Findings */}
           <div className="findings">
-            {filtered.map(f => (
-              <FindingItem
-                key={f.id}
-                finding={f}
-                open={openId === f.id}
-                onToggle={() => setOpenId(openId === f.id ? null : f.id)}
-              />
-            ))}
+            {filtered.length === 0 ? (
+              <div className="muted" style={{ padding: '40px 0', textAlign: 'center', fontSize: 13 }}>
+                No findings at this severity level.
+              </div>
+            ) : (
+              filtered.map(f => (
+                <FindingItem
+                  key={f.id}
+                  finding={f}
+                  open={openId === f.id}
+                  onToggle={() => setOpenId(openId === f.id ? null : f.id)}
+                />
+              ))
+            )}
           </div>
         </div>
       </div>

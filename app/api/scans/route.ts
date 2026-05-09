@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
 
     const userId = (session.user as any).id as string
     const userPlan = (session.user as any).plan as string ?? 'free'
+    const isDemoUser = session.user?.email === 'demo@invariant.sh'
 
     const body = await req.json()
     const { targetUrl, type, depth } = body as {
@@ -35,19 +36,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid URL' }, { status: 400 })
     }
 
-    // Plan enforcement: authenticated scans require growth+
-    if (type === 'authenticated' && userPlan === 'free') {
-      return NextResponse.json({ error: 'upgrade_required' }, { status: 403 })
-    }
+    // Demo user bypasses all plan enforcement
+    if (!isDemoUser) {
+      // Plan enforcement: authenticated scans require growth+
+      if (type === 'authenticated' && userPlan === 'free') {
+        return NextResponse.json({ error: 'upgrade_required' }, { status: 403 })
+      }
 
-    // Plan enforcement: free tier — max 1 scan per day
-    if (userPlan === 'free') {
-      const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
-      const recentCount = await prisma.scan.count({
-        where: { userId, createdAt: { gte: dayAgo } },
-      })
-      if (recentCount >= 1) {
-        return NextResponse.json({ error: 'daily_limit_reached' }, { status: 429 })
+      // Plan enforcement: free tier — max 1 scan per day
+      if (userPlan === 'free') {
+        const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
+        const recentCount = await prisma.scan.count({
+          where: { userId, createdAt: { gte: dayAgo } },
+        })
+        if (recentCount >= 1) {
+          return NextResponse.json({ error: 'daily_limit_reached' }, { status: 429 })
+        }
       }
     }
 
