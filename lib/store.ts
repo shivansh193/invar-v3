@@ -1,5 +1,6 @@
 import { prisma } from './prisma'
 import { ScanType, ScanDepth } from './types'
+import type { ScanCredentials } from './authenticated-scanner'
 
 export interface Finding {
   id: string
@@ -104,10 +105,10 @@ export const store = {
     await prisma.scan.update({ where: { id }, data })
   },
 
-  async getScanCredentials(id: string): Promise<{ username: string; password: string } | null> {
+  async getScanCredentials(id: string): Promise<ScanCredentials | null> {
     const row = await prisma.scan.findUnique({ where: { id }, select: { credentials: true } })
     if (!row?.credentials) return null
-    try { return JSON.parse(row.credentials) } catch { return null }
+    try { return JSON.parse(row.credentials) as ScanCredentials } catch { return null }
   },
 
   async clearScanCredentials(id: string): Promise<void> {

@@ -9,7 +9,7 @@
  */
 
 import type { Browser, BrowserContext, Page, Response as PwResponse } from 'playwright-core'
-import { runAuthenticatedScan, generateExecutiveSummary } from './authenticated-scanner'
+import { runAuthenticatedScan, generateExecutiveSummary, ScanCredentials } from './authenticated-scanner'
 
 export interface ScanFinding {
   title: string
@@ -73,7 +73,7 @@ function sleep(ms: number) {
 export interface ScanOptions {
   mode?: 'unauthenticated' | 'authenticated'
   depth?: 'quick' | 'shallow' | 'standard' | 'deep'
-  credentials?: { username: string; password: string }
+  credentials?: ScanCredentials
 }
 
 export async function runScan(

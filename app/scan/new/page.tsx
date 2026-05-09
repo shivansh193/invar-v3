@@ -12,8 +12,10 @@ function OnboardingInner() {
   const [step, setStep] = useState(0)
   const [url, setUrl] = useState(searchParams.get('url') || '')
   const [scanType, setScanType] = useState<'public' | 'full'>('full')
+  const [authMethod, setAuthMethod] = useState<'password' | 'cookie'>('password')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [cookieString, setCookieString] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -26,8 +28,12 @@ function OnboardingInner() {
         type: scanType === 'full' ? 'authenticated' : 'unauthenticated',
         depth: 'quick',
       }
-      if (scanType === 'full' && username) {
-        body.credentials = { username, password }
+      if (scanType === 'full') {
+        if (authMethod === 'password' && username) {
+          body.credentials = { type: 'password', username, password }
+        } else if (authMethod === 'cookie' && cookieString.trim()) {
+          body.credentials = { type: 'cookie', cookies: cookieString.trim() }
+        }
       }
       const res = await fetch('/api/scans', {
         method: 'POST',
@@ -128,19 +134,54 @@ function OnboardingInner() {
         {step === 1 && scanType === 'full' && (
           <div className="ob-content">
             <div className="eyebrow" style={{ marginBottom: 18 }}>STEP 02 · AUTHENTICATE</div>
-            <h1 className="ob-h">Provide login credentials</h1>
-            <p className="ob-sub">We&rsquo;ll log in as a test user to scan your authenticated flows. These credentials are used only during the scan and never stored.</p>
+            <h1 className="ob-h">How should we log in?</h1>
+            <p className="ob-sub">These credentials are used only during the scan and never stored.</p>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 32 }}>
-              <div>
-                <label style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>Test account email</label>
-                <input className="input" type="email" placeholder="testuser@yourcompany.com" value={username} onChange={e => setUsername(e.target.value)} />
-              </div>
-              <div>
-                <label style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>Test account password</label>
-                <input className="input" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} />
-              </div>
+            {/* Auth method toggle */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
+              <button
+                className={`btn btn-sm ${authMethod === 'password' ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => setAuthMethod('password')}
+              >
+                Username &amp; password
+              </button>
+              <button
+                className={`btn btn-sm ${authMethod === 'cookie' ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => setAuthMethod('cookie')}
+              >
+                Session cookie
+              </button>
             </div>
+
+            {authMethod === 'password' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 32 }}>
+                <div>
+                  <label style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>Test account email</label>
+                  <input className="input" type="email" placeholder="testuser@yourcompany.com" value={username} onChange={e => setUsername(e.target.value)} />
+                </div>
+                <div>
+                  <label style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>Test account password</label>
+                  <input className="input" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} />
+                </div>
+              </div>
+            )}
+
+            {authMethod === 'cookie' && (
+              <div style={{ marginBottom: 32 }}>
+                <label style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>Cookie header value</label>
+                <textarea
+                  className="input mono"
+                  rows={4}
+                  placeholder="session=abc123; _ga=GA1.2.xxx; auth_token=eyJ..."
+                  value={cookieString}
+                  onChange={e => setCookieString(e.target.value)}
+                  style={{ resize: 'vertical', fontSize: 12 }}
+                />
+                <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 8 }}>
+                  Paste the value of the <span className="mono">Cookie:</span> header from your browser&rsquo;s DevTools → Network tab. Use this for Google-authenticated apps or any SSO login.
+                </p>
+              </div>
+            )}
 
             {error && <p style={{ color: 'var(--crit)', fontSize: 13, marginBottom: 16 }}>{error}</p>}
 

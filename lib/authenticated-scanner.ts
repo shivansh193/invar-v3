@@ -29,6 +29,10 @@ interface ActionRecord {
   reasoning: string
 }
 
+export type ScanCredentials =
+  | { type: 'password'; username: string; password: string }
+  | { type: 'cookie'; cookies: string }
+
 export type AuthEmit = (message: string, finding?: ScanFinding) => void
 
 // ---------------------------------------------------------------------------
@@ -133,7 +137,7 @@ const HAS_ID = /\/\d{2,19}(\/|$|\?|#)|[?&](id|user_id|userId|account_id|order_id
 export async function runAuthenticatedScan(
   browser: import('playwright-core').Browser,
   targetUrl: string,
-  credentials: { username: string; password: string },
+  credentials: ScanCredentials,
   depth: string,
   emit: AuthEmit,
 ): Promise<ScanFinding[]> {
@@ -178,95 +182,134 @@ export async function runAuthenticatedScan(
   const page: Page = await context.newPage()
 
   try {
-    // ── Login ──────────────────────────────────────────────────────────────────
-    safeEmit(`→ Logging in as ${credentials.username}…`)
+    // ── Login / Session setup ─────────────────────────────────────────────────
+    if (credentials.type === 'cookie') {
+      // Inject cookies directly — skip the login form entirely.
+      // Useful for Google OAuth, SSO, or any app where form-based login is not feasible.
+      safeEmit('→ Injecting session cookies…')
+      const hostname = new URL(targetUrl).hostname
+      const cookiePairs = credentials.cookies
+        .split(';')
+        .map(s => s.trim())
+        .filter(Boolean)
 
-    await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 })
-    await page.waitForTimeout(800)
+      const parsedCookies = cookiePairs.map(pair => {
+        const eqIdx = pair.indexOf('=')
+        const name = eqIdx > -1 ? pair.slice(0, eqIdx).trim() : pair.trim()
+        const value = eqIdx > -1 ? pair.slice(eqIdx + 1).trim() : ''
+        return { name, value, domain: hostname, path: '/' }
+      })
 
-    const loginHtml = preprocessHtml(await page.content())
+      await context.addCookies(parsedCookies)
+      safeEmit(`  • Injected ${parsedCookies.length} cookie(s) — navigating to target…`)
 
-    // Ask Gemini to identify the login form selectors
-    let usernameSelector = 'input[type="email"], input[name="email"], input[name="username"], input[type="text"]'
-    let passwordSelector = 'input[type="password"]'
-    let submitSelector = 'button[type="submit"], input[type="submit"]'
+      await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 })
+      await page.waitForTimeout(800)
 
-    try {
-      const selectorResult = await model.generateContent(
-        `The following is the HTML of a page. Identify the CSS selector for the username/email input, ` +
-        `the password input, and the submit button. If the page is not a login page return null for all. ` +
-        `Return ONLY valid JSON in exactly this format, nothing else:\n` +
-        `{"usernameSelector":"...","passwordSelector":"...","submitSelector":"..."}\n\nHTML:\n${loginHtml}`,
-      )
-      const parsed = JSON.parse(extractJson(selectorResult.response.text()))
-      if (parsed.usernameSelector) usernameSelector = parsed.usernameSelector
-      if (parsed.passwordSelector) passwordSelector = parsed.passwordSelector
-      if (parsed.submitSelector) submitSelector = parsed.submitSelector
-    } catch {
-      // fall through to defaults
-    }
+      // Quick sanity check: are we on a login page still?
+      const postInjectUrl = page.url()
+      const postInjectHtml = (await page.content()).slice(0, 1_000)
+      const stillOnLogin = /login|signin|sign.in|please log in/i.test(postInjectHtml)
+      if (stillOnLogin) {
+        report({
+          title: 'Authenticated scan failed — session cookie appears invalid or expired',
+          severity: 'HIGH',
+          category: 'Authentication',
+          description:
+            'The injected session cookie did not grant access to the application. ' +
+            'The scanner was redirected to a login page.',
+          evidence: `Target: ${targetUrl}\nPost-inject URL: ${postInjectUrl}\nCookies injected: ${parsedCookies.map(c => c.name).join(', ')}`,
+          remediation:
+            'Ensure the session cookie is valid and not expired. Copy it from an active logged-in browser session in DevTools → Application → Cookies.',
+        })
+        return findings
+      }
 
-    // Fill and submit
-    try {
-      await page.fill(usernameSelector, credentials.username)
-      await page.fill(passwordSelector, credentials.password)
-      await Promise.all([
-        page.waitForNavigation({ timeout: 10_000 }).catch(() => {}),
-        page.click(submitSelector),
-      ])
-    } catch {
-      // Fallback: try enter key
+      safeEmit('→ Session active — beginning authenticated exploration')
+    } else {
+      // Form-based login
+      safeEmit(`→ Logging in as ${credentials.username}…`)
+
+      await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 20_000 })
+      await page.waitForTimeout(800)
+
+      const loginHtml = preprocessHtml(await page.content())
+
+      let usernameSelector = 'input[type="email"], input[name="email"], input[name="username"], input[type="text"]'
+      let passwordSelector = 'input[type="password"]'
+      let submitSelector = 'button[type="submit"], input[type="submit"]'
+
       try {
-        await page.fill('input[type="email"], input[name="email"], input[name="username"]', credentials.username)
-        await page.fill('input[type="password"]', credentials.password)
+        const selectorResult = await model.generateContent(
+          `The following is the HTML of a page. Identify the CSS selector for the username/email input, ` +
+          `the password input, and the submit button. If the page is not a login page return null for all. ` +
+          `Return ONLY valid JSON in exactly this format, nothing else:\n` +
+          `{"usernameSelector":"...","passwordSelector":"...","submitSelector":"..."}\n\nHTML:\n${loginHtml}`,
+        )
+        const parsed = JSON.parse(extractJson(selectorResult.response.text()))
+        if (parsed.usernameSelector) usernameSelector = parsed.usernameSelector
+        if (parsed.passwordSelector) passwordSelector = parsed.passwordSelector
+        if (parsed.submitSelector) submitSelector = parsed.submitSelector
+      } catch { /* fall through to defaults */ }
+
+      try {
+        await page.fill(usernameSelector, credentials.username)
+        await page.fill(passwordSelector, credentials.password)
         await Promise.all([
           page.waitForNavigation({ timeout: 10_000 }).catch(() => {}),
-          page.keyboard.press('Enter'),
+          page.click(submitSelector),
         ])
-      } catch { /* ignore */ }
+      } catch {
+        try {
+          await page.fill('input[type="email"], input[name="email"], input[name="username"]', credentials.username)
+          await page.fill('input[type="password"]', credentials.password)
+          await Promise.all([
+            page.waitForNavigation({ timeout: 10_000 }).catch(() => {}),
+            page.keyboard.press('Enter'),
+          ])
+        } catch { /* ignore */ }
+      }
+
+      await page.waitForLoadState('domcontentloaded').catch(() => {})
+      await page.waitForTimeout(800)
+
+      const postLoginUrl = page.url()
+      const postLoginHtml = preprocessHtml(await page.content())
+
+      let loginSucceeded = false
+      try {
+        const verifyResult = await model.generateContent(
+          `After attempting login, the browser is at: ${postLoginUrl}\n\n` +
+          `HTML preview:\n${postLoginHtml.slice(0, 4_000)}\n\n` +
+          `Did the login succeed? Return ONLY valid JSON: {"success":true/false,"reason":"one sentence"}`,
+        )
+        const v = JSON.parse(extractJson(verifyResult.response.text()))
+        loginSucceeded = v.success === true
+      } catch {
+        loginSucceeded =
+          postLoginUrl !== targetUrl &&
+          !/login|signin|sign-in|auth/i.test(postLoginUrl)
+      }
+
+      if (!loginSucceeded) {
+        report({
+          title: 'Authenticated scan failed — could not log in',
+          severity: 'HIGH',
+          category: 'Authentication',
+          description:
+            'The scanner could not log in with the provided credentials. The authenticated scan phase was skipped.',
+          evidence:
+            `Target: ${targetUrl}\nPost-login URL: ${postLoginUrl}\n` +
+            `Credentials used: ${credentials.username} / [redacted]`,
+          remediation:
+            'Verify the test account credentials are correct and the account is active. ' +
+            'Ensure the login form is accessible at the target URL.',
+        })
+        return findings
+      }
+
+      safeEmit('→ Login confirmed — beginning authenticated exploration')
     }
-
-    await page.waitForLoadState('domcontentloaded').catch(() => {})
-    await page.waitForTimeout(800)
-
-    const postLoginUrl = page.url()
-    const postLoginHtml = preprocessHtml(await page.content())
-
-    // Verify login
-    let loginSucceeded = false
-    try {
-      const verifyResult = await model.generateContent(
-        `After attempting login, the browser is at: ${postLoginUrl}\n\n` +
-        `HTML preview:\n${postLoginHtml.slice(0, 4_000)}\n\n` +
-        `Did the login succeed? Return ONLY valid JSON: {"success":true/false,"reason":"one sentence"}`,
-      )
-      const v = JSON.parse(extractJson(verifyResult.response.text()))
-      loginSucceeded = v.success === true
-    } catch {
-      // Heuristic: URL changed away from login page
-      loginSucceeded =
-        postLoginUrl !== targetUrl &&
-        !/login|signin|sign-in|auth/i.test(postLoginUrl)
-    }
-
-    if (!loginSucceeded) {
-      report({
-        title: 'Authenticated scan failed — could not log in',
-        severity: 'HIGH',
-        category: 'Authentication',
-        description:
-          'The scanner could not log in with the provided credentials. The authenticated scan phase was skipped.',
-        evidence:
-          `Target: ${targetUrl}\nPost-login URL: ${postLoginUrl}\n` +
-          `Credentials used: ${credentials.username} / [redacted]`,
-        remediation:
-          'Verify the test account credentials are correct and the account is active. ' +
-          'Ensure the login form is accessible at the target URL.',
-      })
-      return findings
-    }
-
-    safeEmit('→ Login confirmed — beginning authenticated exploration')
 
     // ── Post-login cookie check ────────────────────────────────────────────────
     const postLoginCookies = await context.cookies()
@@ -332,7 +375,7 @@ export async function runAuthenticatedScan(
     }
 
     // ── Reasoning loop ─────────────────────────────────────────────────────────
-    const visitedUrls = new Set<string>([postLoginUrl])
+    const visitedUrls = new Set<string>([page.url()])
     const resourceUrls: string[] = []
     const actionHistory: ActionRecord[] = []
 
