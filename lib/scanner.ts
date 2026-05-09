@@ -454,8 +454,14 @@ export async function runScan(targetUrl: string, emit: Emit): Promise<ScanFindin
         const probeUrl = new URL(path, finalUrl).toString()
         const res = await page.request.get(probeUrl, { timeout: 5_000 })
         if (res.ok()) {
-          const body = (await res.text()).slice(0, 120)
-          exposedFiles.push(`GET ${probeUrl} → ${res.status()} OK\n  preview: ${body}`)
+          const body = await res.text()
+          // A 200 from a catch-all route (e.g. Next.js, SPAs) returns the app
+          // shell, not the file itself. Only flag if the body actually looks
+          // like a real sensitive file — not HTML.
+          const looksLikeHtml = /^\s*<!doctype\s+html|^\s*<html/i.test(body)
+          if (looksLikeHtml) continue
+          const preview = body.slice(0, 120)
+          exposedFiles.push(`GET ${probeUrl} → ${res.status()} OK\n  preview: ${preview}`)
         }
       } catch {
         // blocked/404 is expected and fine
