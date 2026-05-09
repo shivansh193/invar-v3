@@ -12,6 +12,8 @@ function OnboardingInner() {
   const [step, setStep] = useState(0)
   const [url, setUrl] = useState(searchParams.get('url') || '')
   const [scanType, setScanType] = useState<'public' | 'full'>('full')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -19,14 +21,18 @@ function OnboardingInner() {
     setSubmitting(true)
     setError('')
     try {
+      const body: Record<string, unknown> = {
+        targetUrl: url,
+        type: scanType === 'full' ? 'authenticated' : 'unauthenticated',
+        depth: 'quick',
+      }
+      if (scanType === 'full' && username) {
+        body.credentials = { username, password }
+      }
       const res = await fetch('/api/scans', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          targetUrl: url,
-          type: scanType === 'full' ? 'authenticated' : 'unauthenticated',
-          depth: 'quick',
-        }),
+        body: JSON.stringify(body),
       })
       const data = await res.json()
       if (res.status === 401) {
@@ -128,11 +134,11 @@ function OnboardingInner() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 32 }}>
               <div>
                 <label style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>Test account email</label>
-                <input className="input" type="email" placeholder="testuser@yourcompany.com" />
+                <input className="input" type="email" placeholder="testuser@yourcompany.com" value={username} onChange={e => setUsername(e.target.value)} />
               </div>
               <div>
                 <label style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>Test account password</label>
-                <input className="input" type="password" placeholder="••••••••" />
+                <input className="input" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} />
               </div>
             </div>
 

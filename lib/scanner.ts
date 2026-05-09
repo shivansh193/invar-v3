@@ -9,6 +9,7 @@
  */
 
 import type { Browser, BrowserContext, Page, Response as PwResponse } from 'playwright-core'
+import { runAuthenticatedScan, generateExecutiveSummary } from './authenticated-scanner'
 
 export interface ScanFinding {
   title: string
@@ -69,8 +70,19 @@ function sleep(ms: number) {
 // ---------------------------------------------------------------------------
 // Main scanner
 // ---------------------------------------------------------------------------
-export async function runScan(targetUrl: string, emit: Emit): Promise<ScanFinding[]> {
+export interface ScanOptions {
+  mode?: 'unauthenticated' | 'authenticated'
+  depth?: 'quick' | 'shallow' | 'standard' | 'deep'
+  credentials?: { username: string; password: string }
+}
+
+export async function runScan(
+  targetUrl: string,
+  emit: Emit,
+  options: ScanOptions = {},
+): Promise<{ findings: ScanFinding[]; summary: string }> {
   const findings: ScanFinding[] = []
+  let summary = ''
 
   const log = (progress: number, message: string) =>
     emit({ progress, message })
@@ -124,12 +136,12 @@ export async function runScan(targetUrl: string, emit: Emit): Promise<ScanFindin
         },
         'complete',
       )
-      return findings
+      return { findings, summary }
     }
 
     if (!mainResponse) {
       emit({ progress: 100, message: '✕ No response from target.' }, 'complete')
-      return findings
+      return { findings, summary }
     }
 
     const finalUrl = page.url()
@@ -486,14 +498,43 @@ export async function runScan(targetUrl: string, emit: Emit): Promise<ScanFindin
     await context.close()
 
     // -----------------------------------------------------------------------
-    // Done
+    // Phase 2 — Authenticated agent (Growth tier only, when credentials given)
     // -----------------------------------------------------------------------
-    log(95, '→ Generating final report…')
-    await sleep(600)
+    if (options.mode === 'authenticated' && options.credentials) {
+      log(88, '→ Phase 2: starting authenticated agent…')
+      await sleep(200)
+
+      const phase2Findings = await runAuthenticatedScan(
+        browser,
+        targetUrl,
+        options.credentials,
+        options.depth ?? 'standard',
+        (message, finding) => {
+          if (finding) {
+            findings.push(finding)
+            emit({ progress: 90, message, finding })
+          } else {
+            emit({ progress: 90, message })
+          }
+        },
+      )
+
+      // phase2Findings already pushed via emit callback; push any stragglers
+      for (const f of phase2Findings) {
+        if (!findings.includes(f)) findings.push(f)
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Executive summary
+    // -----------------------------------------------------------------------
+    log(95, '→ Generating executive summary…')
+    await sleep(400)
+    summary = await generateExecutiveSummary(targetUrl, findings)
 
   } finally {
     await browser.close()
   }
 
-  return findings
+  return { findings, summary }
 }

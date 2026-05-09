@@ -18,10 +18,11 @@ export async function POST(req: NextRequest) {
     const isDemoUser = session.user?.email === 'demo@invariant.sh'
 
     const body = await req.json()
-    const { targetUrl, type, depth } = body as {
+    const { targetUrl, type, depth, credentials } = body as {
       targetUrl: string
       type: ScanType
       depth: ScanDepth
+      credentials?: { username: string; password: string }
     }
 
     if (!targetUrl) {
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
       type: type ?? 'unauthenticated',
       depth: depth ?? 'standard',
       userId,
+      credentials: credentials ? JSON.stringify(credentials) : undefined,
     })
 
     return NextResponse.json(

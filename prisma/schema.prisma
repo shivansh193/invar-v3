@@ -27,6 +27,7 @@ model Scan {
   mode        String    @default("unauthenticated")
   depth       String    @default("standard")
   summary     String?
+  credentials String?
   createdAt   DateTime  @default(now())
   completedAt DateTime?
   user        User      @relation(fields: [userId], references: [id])

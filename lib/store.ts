@@ -55,6 +55,7 @@ export const store = {
     type: ScanType
     depth: ScanDepth
     userId: string
+    credentials?: string
   }): Promise<Scan> {
     const dbScan = await prisma.scan.create({
       data: {
@@ -63,6 +64,7 @@ export const store = {
         depth: data.depth,
         userId: data.userId,
         status: 'pending',
+        credentials: data.credentials ?? null,
       },
       include: { findings: true },
     })
@@ -100,6 +102,20 @@ export const store = {
       data.completedAt = new Date()
     }
     await prisma.scan.update({ where: { id }, data })
+  },
+
+  async getScanCredentials(id: string): Promise<{ username: string; password: string } | null> {
+    const row = await prisma.scan.findUnique({ where: { id }, select: { credentials: true } })
+    if (!row?.credentials) return null
+    try { return JSON.parse(row.credentials) } catch { return null }
+  },
+
+  async clearScanCredentials(id: string): Promise<void> {
+    await prisma.scan.update({ where: { id }, data: { credentials: null } })
+  },
+
+  async updateScanSummary(id: string, summary: string): Promise<void> {
+    await prisma.scan.update({ where: { id }, data: { summary } })
   },
 
   async addFinding(

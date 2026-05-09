@@ -7,7 +7,14 @@
       "Read(//c/Development/invar-v3/**)",
       "Bash(node -e \"console.log\\(require\\('@prisma/client/package.json'\\).version\\)\")",
       "Bash(node -e \"console.log\\(require\\('next-auth/package.json'\\).version\\)\")",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(gh pr create --title 'Fix false-positive: sensitive file scanner skips HTML catch-all responses' --body ' *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Development\\\\invar-v3\\\\.claude\\\\worktrees\\\\hardcore-pare-0c6591\" -Force)",
+      "Bash(Select-Object Name, Mode)",
+      "Bash(Format-Table -AutoSize)",
+      "Bash(npx prisma *)",
+      "Bash(npx tsc *)",
+      "Bash(git add *)"
     ]
   }
 }

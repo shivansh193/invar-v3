@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { store } from '@/lib/store'
 import { assertScanOwnership, ScanNotFoundError } from '@/lib/scan-auth'
-import { runScan } from '@/lib/scanner'
+import { runScan, ScanOptions } from '@/lib/scanner'
 
 export const maxDuration = 120 // Vercel: allow up to 2 minutes for a scan
 
@@ -63,8 +63,18 @@ export async function GET(
       const scan = await store.getScan(id)
       const targetUrl = scan?.targetUrl ?? ''
 
+      // Read and immediately clear credentials from DB so they aren't stored longer than needed
+      const credentials = await store.getScanCredentials(id)
+      await store.clearScanCredentials(id)
+
+      const scanOptions: ScanOptions = {
+        mode: scan?.type as ScanOptions['mode'],
+        depth: scan?.depth as ScanOptions['depth'],
+        credentials: credentials ?? undefined,
+      }
+
       try {
-        const findings = await runScan(targetUrl, (event, eventName) => {
+        const { findings, summary } = await runScan(targetUrl, (event, eventName) => {
           if (event.finding) {
             // Persist finding to DB then stream it
             store.addFinding(id, {
@@ -84,17 +94,18 @@ export async function GET(
           } else {
             sendEvent({ progress: event.progress, message: event.message }, eventName)
           }
-        })
+        }, scanOptions)
 
         // Small delay so the last DB writes finish before we mark complete
         await new Promise<void>((r) => setTimeout(r, 800))
 
         await store.updateScanStatus(id, 'complete')
+        if (summary) await store.updateScanSummary(id, summary)
 
         const total = findings.length
         const crits = findings.filter((f) => f.severity === 'CRITICAL').length
         const highs = findings.filter((f) => f.severity === 'HIGH').length
-        const summary = [
+        const severityLabel = [
           crits > 0 && `${crits} critical`,
           highs > 0 && `${highs} high`,
         ]
@@ -104,7 +115,7 @@ export async function GET(
         sendEvent(
           {
             progress: 100,
-            message: `Scan complete. ${total} finding${total !== 1 ? 's' : ''}${summary ? ' — ' + summary : ''}.`,
+            message: `Scan complete. ${total} finding${total !== 1 ? 's' : ''}${severityLabel ? ' — ' + severityLabel : ''}.`,
           },
           'complete',
         )
